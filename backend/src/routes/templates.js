@@ -377,13 +377,19 @@ router.put("/mappings", async (req, res) => {
       message: "Template mappings saved successfully.",
       data,
     });
-  } catch (error) {
-    console.error("PUT /api/templates/mappings failed:", error.message);
+ } catch (error) {
+  console.error("POST /api/templates failed:", error.message);
+  console.error("HTTP STATUS:", error.status);
+  console.error(
+    "META DETAILS:",
+    JSON.stringify(error.metaDetails, null, 2)
+  );
 
-    return res.status(400).json({
-      error: error.message || "Failed to save template mappings.",
-    });
-  }
+  return res.status(400).json({
+    error: error.message || "Failed to submit template",
+    details: error.metaDetails || null,
+  });
+}
 });
 
 /* CREATE AND SUBMIT A NEW TEMPLATE TO META */
@@ -412,10 +418,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const validatedMappings = validateMappings(
-      variable_mappings,
-      body
-    );
+    const validatedMappings = [];
 
     const metaData = await createMetaTemplate({
       name: name.trim(),

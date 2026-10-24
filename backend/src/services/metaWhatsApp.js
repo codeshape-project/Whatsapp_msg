@@ -1,13 +1,4 @@
-// import { config } from '../config.js';
-// export function metaConfigured(){ return Boolean(config.metaPhoneNumberId && config.metaAccessToken); }
-// export async function sendTemplate({to,name,language='en_US',components=[]}){
-//   if(!metaConfigured()) throw new Error('Meta WhatsApp API is not configured. Add META_PHONE_NUMBER_ID and META_ACCESS_TOKEN to backend/.env.');
-//   const url=`https://graph.facebook.com/${config.metaGraphVersion}/${config.metaPhoneNumberId}/messages`;
-//   const response=await fetch(url,{method:'POST',headers:{Authorization:`Bearer ${config.metaAccessToken}`,'Content-Type':'application/json'},body:JSON.stringify({messaging_product:'whatsapp',to,type:'template',template:{name,language:{code:language},...(components.length?{components}:{})}})});
-//   const body=await response.json().catch(()=>({}));
-//   if(!response.ok) throw new Error(body?.error?.message||`Meta API request failed (${response.status}).`);
-//   return body;
-// }
+
 import { config } from "../config.js";
 
 export function metaConfigured() {
@@ -48,12 +39,25 @@ export async function getApprovedTemplates() {
 
     const result = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-      throw new Error(
-        result?.error?.message ||
-          `Meta template request failed (${response.status}).`
-      );
-    }
+ if (!response.ok) {
+  console.error(
+    "========== META TEMPLATE ERROR =========="
+  );
+  console.error(JSON.stringify(result, null, 2));
+  console.error(
+    "========================================="
+  );
+
+  const error = new Error(
+    result?.error?.message ||
+    `Meta template submission failed (${response.status})`
+  );
+
+  error.metaDetails = result;
+  error.status = response.status;
+
+  throw error;
+}
 
     allTemplates.push(...(result.data || []));
     nextUrl = result.paging?.next || null;

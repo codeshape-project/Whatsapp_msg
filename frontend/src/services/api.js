@@ -157,6 +157,40 @@ export const api = {
 
   getRecentActivity: async () =>
     (await request("/dashboard/activity")).data,
+  
+  // Fetch branches created in Master Management.
+  getBranches: async () => {
+  const response = await request("/master/branches");
+  return response.data;
+},
+
+getDepartments: async (branchId = null) => {
+  const query = branchId
+    ? `?branch_id=${encodeURIComponent(branchId)}`
+    : "";
+
+  return request(`/master/departments${query}`);
+},
+
+  // Create a branch.
+  createBranch: async (payload) => {
+    return request("/master/branches", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Create a department, optionally under a branch.
+  createDepartment: async (payload) => {
+    return request("/master/departments", {
+      method: "POST",
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description || "",
+        branch_id: payload.branch_id || null,
+      }),
+    });
+  },
 
   getContacts: async () => {
     const response = await request("/contacts?limit=250");

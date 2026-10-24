@@ -14,6 +14,7 @@ import reports from './routes/reports.js';
 import webhooks from './routes/webhooks.js';
 import dashboard from './routes/dashboard.js';
 import templates from './routes/templates.js';
+import masterManagement from "./routes/masterManagement.js";
 const app = express();
 
 const allowedOrigins = (config.frontendUrl || 'http://localhost:5173')
@@ -91,7 +92,7 @@ app.use('/api/contacts', requireAuth, contacts);
 app.use('/api/campaigns', requireAuth, campaigns);
 app.use('/api/templates', requireAuth, templates);
 app.use('/api/reports', requireAuth, reports);
-
+app.use("/api/master", requireAuth, masterManagement);
 app.use((req, res) => {
   res.status(404).json({
     error: `Route not found: ${req.method} ${req.path}`
