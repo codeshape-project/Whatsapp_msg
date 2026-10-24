@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply font-sans text-slate-800 antialiased;
+  background:
+    radial-gradient(900px 520px at 100% 0%, rgba(37, 211, 102, 0.16), transparent 60%),
+    radial-gradient(800px 520px at 0% 100%, rgba(18, 140, 126, 0.16), transparent 60%),
+    #eaf7f0;
+  background-attachment: fixed;
+}
+
+/* Shared look for every page – change colours here to restyle the whole site */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-brand-100 bg-white;
+    box-shadow: 0 8px 24px -12px rgba(7, 94, 84, 0.3);
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-800 to-brand-700 px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50;
+    box-shadow: 0 6px 16px -6px rgba(18, 140, 126, 0.8);
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-medium text-brand-800 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400;
+  }
+  .input {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-700 focus:ring-2 focus:ring-brand-200;
+  }
+}
