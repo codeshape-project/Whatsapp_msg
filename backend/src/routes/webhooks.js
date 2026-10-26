@@ -217,6 +217,11 @@ router.post("/whatsapp", async (req, res) => {
         /* ---------- Delivery status updates ---------- */
 
         for (const statusEvent of value.statuses || []) {
+            console.log("[Meta status event]", {
+  id: statusEvent.id,
+  status: statusEvent.status,
+  phoneNumberId,
+});
           const metaMessageId = statusEvent.id;
           const status = statusEvent.status;
 
@@ -248,13 +253,29 @@ router.post("/whatsapp", async (req, res) => {
               .slice(0, 500);
           }
 
-          const { error: updateError } = await supabase
-            .from("messages")
-            .update(update)
-            .eq("meta_message_id", metaMessageId)
-            .eq("organization_id", organizationId);
+         const { data: updatedMessages, error: updateError } =
+  await supabase
+    .from("messages")
+    .update(update)
+    .eq("meta_message_id", metaMessageId)
+    .eq("organization_id", organizationId)
+    .select("id, status, meta_message_id");
 
-          throwIfError(updateError);
+throwIfError(updateError);
+
+if (!updatedMessages || updatedMessages.length === 0) {
+  console.error("[WhatsApp webhook] No message matched status update:", {
+    metaMessageId,
+    status,
+    organizationId,
+  });
+} else {
+  console.log("[WhatsApp webhook] Message status updated:", {
+    metaMessageId,
+    status,
+    organizationId,
+  });
+}
         }
       }
     }
