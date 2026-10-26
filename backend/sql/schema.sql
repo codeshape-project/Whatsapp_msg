@@ -52,3 +52,29 @@ alter table public.templates enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.messages enable row level security;
 -- No anonymous/public policies are created intentionally. Access through authenticated backend routes.
+ALTER TABLE public.messages
+  ALTER COLUMN campaign_id DROP NOT NULL;
+
+ALTER TABLE public.messages
+  ADD COLUMN IF NOT EXISTS direction text
+    NOT NULL DEFAULT 'outgoing',
+  ADD COLUMN IF NOT EXISTS message_type text,
+  ADD COLUMN IF NOT EXISTS message_body text,
+  ADD COLUMN IF NOT EXISTS message_timestamp timestamptz,
+  ADD COLUMN IF NOT EXISTS sender_phone text,
+  ADD COLUMN IF NOT EXISTS recipient_phone text,
+  ADD COLUMN IF NOT EXISTS raw_payload jsonb;
+
+CREATE INDEX IF NOT EXISTS messages_contact_history_idx
+  ON public.messages (
+    organization_id,
+    contact_id,
+    message_timestamp DESC
+  );
+
+CREATE INDEX IF NOT EXISTS messages_meta_id_idx
+  ON public.messages (meta_message_id);
+
+ALTER TABLE public.messages
+  ADD CONSTRAINT messages_direction_check
+  CHECK (direction IN ('incoming', 'outgoing'));

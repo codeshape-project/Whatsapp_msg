@@ -94,7 +94,6 @@
 //   );
 // }
 
-
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -132,6 +131,10 @@ const links = [
 function getRows(result) {
   if (Array.isArray(result)) return result;
   if (Array.isArray(result?.data)) return result.data;
+  if (Array.isArray(result?.branches)) return result.branches;
+  if (Array.isArray(result?.departments)) return result.departments;
+  if (Array.isArray(result?.data?.branches)) return result.data.branches;
+  if (Array.isArray(result?.data?.departments)) return result.data.departments;
   return [];
 }
 
@@ -164,11 +167,15 @@ export default function Sidebar({ open, onClose }) {
         api.getDepartments(),
       ]);
 
-      const branchRows = getRows(branchResult);
-      const departmentRows = getRows(departmentResult);
+      setBranches(
+        getRows(branchResult).filter((item) => item.is_active !== false)
+      );
 
-      setBranches(branchRows);
-      setDepartments(departmentRows);
+      setDepartments(
+        getRows(departmentResult).filter(
+          (item) => item.is_active !== false
+        )
+      );
     } catch (error) {
       console.error("Unable to load master data:", error);
       setLoadError("Unable to load branches and departments.");
@@ -179,31 +186,38 @@ export default function Sidebar({ open, onClose }) {
 
   useEffect(() => {
     loadMasterData();
-  }, []);
+    // Reload when the signed-in organization changes.
+  }, [organization?.id]);
 
-  // Expand Master Management and the selected branch when navigating.
+  // Keep the sidebar open and expand the relevant branch when needed.
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const branchId = params.get("branch_id");
+
     if (location.pathname.startsWith("/master-management")) {
       setMasterOpen(true);
+    }
 
-      const params = new URLSearchParams(location.search);
-      const branchId = params.get("branch_id");
-
-      if (branchId) {
-        setExpandedBranches((previous) => ({
-          ...previous,
-          [branchId]: true,
-        }));
-      }
+    if (branchId) {
+      setExpandedBranches((previous) => ({
+        ...previous,
+        [branchId]: true,
+      }));
     }
   }, [location.pathname, location.search]);
 
-  const handleMasterClick = () => {
-    setMasterOpen((previous) => !previous);
-    navigate("/master-management");
-    onClose?.();
-  };
+  // Master Management opens the page for creating/managing branches
+  // and departments. It does not toggle away from the management page.
+  
+const handleMasterClick = () => {
+  setMasterOpen((previous) => !previous);
+  navigate("/master-management");
+  onClose?.();
+};
 
+
+  // Clicking a branch expands/collapses it. The branch name also
+  // opens Master Management with that branch selected.
   const toggleBranch = (branch) => {
     setExpandedBranches((previous) => ({
       ...previous,
@@ -216,22 +230,19 @@ export default function Sidebar({ open, onClose }) {
     onClose?.();
   };
 
-  const openDepartment = (department, branchId = null) => {
-    const params = new URLSearchParams();
+  // IMPORTANT: clicking a department opens Contacts, not Master Management.
+const openDepartment = (department, branchId = null) => {
+  const params = new URLSearchParams({
+    department_id: String(department.id),
+    department_name: department.name,
+  });
 
-    if (branchId) {
-      params.set("branch_id", branchId);
-    }
+  if (branchId) {
+    params.set("branch_id", String(branchId));
+  }
 
-    if (department.id) {
-      params.set("department_id", department.id);
-    }
-
-    navigate(
-      `/master-management${params.toString() ? `?${params.toString()}` : ""}`
-    );
-    onClose?.();
-  };
+  navigate(`/department-contacts?${params.toString()}`);
+};
 
   const independentDepartments = departments.filter(
     (department) => department.branch_id == null
@@ -276,7 +287,7 @@ export default function Sidebar({ open, onClose }) {
           <div className="mt-3 h-px w-full bg-gradient-to-r from-transparent via-wa/50 to-transparent" />
         </div>
 
-        {/* Navigation; scrollbar hidden while scrolling remains enabled */}
+        {/* Navigation */}
         <nav
           className="min-h-0 flex-1 space-y-1 overflow-y-auto"
           style={{
@@ -318,7 +329,7 @@ export default function Sidebar({ open, onClose }) {
               }`}
             >
               <PanelsTopLeft size={18} />
-              <span className="flex-1">Master Management</span>
+              <span className="flex-1">Master</span>
               {masterOpen ? (
                 <ChevronDown size={15} />
               ) : (
@@ -347,7 +358,7 @@ export default function Sidebar({ open, onClose }) {
                   </div>
                 )}
 
-                {/* Branches with nested departments */}
+                {/* Branches and their departments */}
                 {!loading &&
                   branches.map((branch) => {
                     const isExpanded = Boolean(
@@ -383,21 +394,39 @@ export default function Sidebar({ open, onClose }) {
                         {isExpanded && (
                           <div className="ml-3 space-y-1 border-l border-white/10 pl-2">
                             {branchDepartments.length > 0 ? (
-                              branchDepartments.map((department) => (
-                                <button
-                                  key={department.id}
-                                  type="button"
-                                  onClick={() =>
-                                    openDepartment(department, branch.id)
-                                  }
-                                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] text-emerald-50/75 hover:bg-white/10 hover:text-white"
-                                >
-                                  <GitBranch size={13} className="shrink-0" />
-                                  <span className="truncate">
-                                    {department.name}
-                                  </span>
-                                </button>
-                              ))
+                              branchDepartments.map((department) => {
+                                const params = new URLSearchParams(
+                                  location.search
+                                );
+
+                                const isSelected =
+                                  location.pathname === "/contacts" &&
+                                  params.get("department_id") ===
+                                    String(department.id);
+
+                                return (
+                                  <button
+                                    key={department.id}
+                                    type="button"
+                                    onClick={() =>
+                                      openDepartment(department, branch.id)
+                                    }
+                                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] transition ${
+                                      isSelected
+                                        ? "bg-wa text-brand-950"
+                                        : "text-emerald-50/75 hover:bg-white/10 hover:text-white"
+                                    }`}
+                                  >
+                                    <GitBranch
+                                      size={13}
+                                      className="shrink-0"
+                                    />
+                                    <span className="truncate">
+                                      {department.name}
+                                    </span>
+                                  </button>
+                                );
+                              })
                             ) : (
                               <p className="px-2 py-2 text-[11px] text-white/50">
                                 No departments
@@ -409,19 +438,31 @@ export default function Sidebar({ open, onClose }) {
                     );
                   })}
 
-                {/* Independent departments always appear, even with branches */}
+                {/* Standalone departments */}
                 {!loading &&
-                  independentDepartments.map((department) => (
-                    <button
-                      key={department.id}
-                      type="button"
-                      onClick={() => openDepartment(department)}
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[12px] text-emerald-50/85 hover:bg-white/10 hover:text-white"
-                    >
-                      <GitBranch size={14} className="shrink-0" />
-                      <span className="truncate">{department.name}</span>
-                    </button>
-                  ))}
+                  independentDepartments.map((department) => {
+                    const params = new URLSearchParams(location.search);
+
+                    const isSelected =
+                      location.pathname === "/contacts" &&
+                      params.get("department_id") === String(department.id);
+
+                    return (
+                      <button
+                        key={department.id}
+                        type="button"
+                        onClick={() => openDepartment(department)}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[12px] transition ${
+                          isSelected
+                            ? "bg-wa text-brand-950"
+                            : "text-emerald-50/85 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <GitBranch size={14} className="shrink-0" />
+                        <span className="truncate">{department.name}</span>
+                      </button>
+                    );
+                  })}
 
                 {!loading &&
                   branches.length === 0 &&
@@ -467,3 +508,4 @@ export default function Sidebar({ open, onClose }) {
     </>
   );
 }
+

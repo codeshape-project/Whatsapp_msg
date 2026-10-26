@@ -25,18 +25,7 @@ router.get("/branches", async (req, res, next) => {
   }
 });
 
-// GET /api/master/departments?branch_id=<uuid>
 
-/* GET /api/master/departments
-   All departments:
-   GET /api/master/departments
-
-   Independent departments:
-   GET /api/master/departments?branch_id=__independent__
-
-   Branch-specific departments:
-   GET /api/master/departments?branch_id=BRANCH_UUID
-*/
 router.get("/departments", async (req, res, next) => {
   try {
     const branchId = req.query.branch_id;

@@ -258,9 +258,15 @@ export async function sendTemplate({
   if (!response.ok) {
     throw new Error(
       body?.error?.message ||
-      `Meta API request failed (${response.status}).`
+        `Meta API request failed (${response.status}).`
     );
   }
 
-  return body;
+  return {
+    ...body,
+    sentAt: new Date().toISOString(),
+    recipient: to,
+    messageType: "template",
+    templateName: name,
+  };
 }

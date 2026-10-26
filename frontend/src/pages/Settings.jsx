@@ -47,8 +47,8 @@ export default function Settings() {
     <PageHeader title="Settings" subtitle={`${organization.name} profile and WhatsApp Cloud API connection`} />
     <form onSubmit={submit} className="grid gap-5 lg:grid-cols-2">
       <section className="card space-y-4 p-5"><h3 className="text-lg font-semibold text-brand-900">{profileLabel} profile</h3>{field("organizationName", `${profileLabel} name`)}{field("location", "Location")}</section>
-      <section className="card space-y-4 p-5"><div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-brand-900">WhatsApp Cloud API</h3><span className="flex items-center gap-1.5 text-xs font-medium text-brand-700"><span className="h-2 w-2 rounded-full bg-wa shadow-[0_0_8px_#25d366]" /> Demo configuration</span></div>{field("phoneId", "Phone number ID")}{field("businessId", "Business account ID")}<p className="text-xs text-slate-500">Access tokens are managed securely in the backend environment file and are never stored in browser settings.</p></section>
-      <div className="flex items-center gap-3 lg:col-span-2"><button type="submit" className="btn-primary">Save changes</button>{saved && <span className="text-sm text-brand-700">Changes saved successfully for {form.organizationName}.</span>}</div>
+     
+      
     </form>
   </>;
 }

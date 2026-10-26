@@ -481,4 +481,63 @@ router.post('/validate-all', async (req, res, next) => {
     next(error);
   }
 });
+
+/* ================= GET CONTACT WHATSAPP HISTORY ================= */
+
+router.get("/:contactId/messages", async (req, res, next) => {
+  try {
+    const { contactId } = req.params;
+
+    const { data: contact, error: contactError } = await supabase
+      .from("contacts")
+      .select("id, name, phone")
+      .eq("organization_id", req.organizationId)
+      .eq("id", contactId)
+      .maybeSingle();
+
+    if (contactError) throw contactError;
+
+    if (!contact) {
+      return res.status(404).json({
+        error: "Contact not found for this organization.",
+      });
+    }
+
+    const { data: messages, error: messagesError } = await supabase
+      .from("messages")
+      .select(`
+        id,
+        campaign_id,
+        contact_id,
+        status,
+        meta_message_id,
+        direction,
+        message_type,
+        message_body,
+        message_timestamp,
+        sender_phone,
+        recipient_phone,
+        sent_at,
+        delivered_at,
+        read_at,
+        last_error,
+        created_at,
+        updated_at
+      `)
+      .eq("organization_id", req.organizationId)
+      .eq("contact_id", contact.id)
+      .order("message_timestamp", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (messagesError) throw messagesError;
+
+    return res.json({
+      data: messages || [],
+      contact,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 export default router;
