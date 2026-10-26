@@ -301,6 +301,8 @@ function TemplateEditor({ initialTemplate, onClose, onSave, saving }) {
     ),
   ].sort((a, b) => a - b);
 
+  
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6">
       <div className="mx-auto max-w-7xl overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl">
@@ -894,11 +896,43 @@ export default function Templates() {
     }
   }
 
-  function deleteTemplate(template) {
-    setNotice(
-      `“${template.name}” was not deleted from Meta. This page only displays templates registered with Meta; deleting a template requires a separate backend endpoint.`
+ 
+
+async function deleteTemplate(template) {
+  if (!template.id) {
+    setError(
+      "This template has no saved database record. Save its mappings first before deleting it from the database."
+    );
+    return;
+  }
+
+  if (!window.confirm(`Delete "${template.name}" from the database?`)) {
+    return;
+  }
+
+  setError("");
+  setNotice("");
+
+  try {
+    await api.request(`/templates/${template.id}`, {
+      method: "DELETE",
+    });
+
+    setTemplates((previous) =>
+      previous.filter((item) => item.id !== template.id)
+    );
+
+    setNotice(`"${template.name}" deleted from the database.`);
+  } catch (error) {
+    console.error("Delete template failed:", error);
+
+    setError(
+      error.response?.data?.error ||
+        error.message ||
+        "Failed to delete template."
     );
   }
+}
 
   if (loading) return <Loader />;
 

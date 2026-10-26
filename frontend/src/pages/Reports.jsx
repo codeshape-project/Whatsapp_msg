@@ -6,7 +6,6 @@ import {
   FileText,
   Send,
   CheckCircle2,
-  Eye,
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
@@ -23,7 +22,9 @@ function PageHeader({ title, subtitle, children }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-2xl font-semibold text-brand-900">{title}</h2>
+        <h2 className="text-2xl font-semibold text-brand-900">
+          {title}
+        </h2>
         {subtitle && (
           <p className="text-sm text-slate-600">{subtitle}</p>
         )}
@@ -65,7 +66,7 @@ function DataTable({ columns, rows }) {
           ) : (
             rows.map((r, i) => (
               <tr
-                key={r.id ?? i}
+                key={r.id ?? r.date ?? i}
                 className="hover:bg-brand-50/60"
               >
                 {columns.map((c) => (
@@ -91,58 +92,26 @@ function localDay(d) {
   return x;
 }
 
-function syntheticDailyRows(source, period) {
-  const now = new Date();
+function parseReportDate(value) {
+  if (!value) return null;
 
-  const days =
-    period === "today"
-      ? 1
-      : period === "weekly"
-        ? 7
-        : period === "monthly"
-          ? 30
-          : 180;
+  // Supports DD/MM/YYYY returned by the backend.
+  const parts = String(value).split("/");
 
-  // Demo data is distributed over the selected range until
-  // real backend message records are connected.
-  const totals = source.reduce(
-    (a, r) => ({
-      sent: a.sent + Number(r.sent || 0),
-      delivered: a.delivered + Number(r.delivered || 0),
-      read: a.read + Number(r.read || 0),
-      failed: a.failed + Number(r.failed || 0),
-    }),
-    { sent: 0, delivered: 0, read: 0, failed: 0 }
-  );
+  if (parts.length === 3) {
+    const [d, m, y] = parts.map(Number);
 
-  const divisor = Math.max(1, days);
+    if (!d || !m || !y) return null;
 
-  return Array.from({ length: days }, (_, i) => {
-    const date = new Date(now);
-    date.setDate(now.getDate() - (days - 1 - i));
+    const date = new Date(y, m - 1, d);
 
-    const factor =
-      period === "today" ? 1 : (i + 3) % 7 === 0 ? 1.7 : 0.72;
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
 
-    const sent = Math.round((totals.sent / divisor) * factor);
-    const delivered = Math.min(
-      sent,
-      Math.round((totals.delivered / divisor) * factor)
-    );
-    const read = Math.min(
-      delivered,
-      Math.round((totals.read / divisor) * factor)
-    );
-    const failed = Math.max(0, sent - delivered);
+  // Also supports ISO dates such as YYYY-MM-DD.
+  const date = new Date(value);
 
-    return {
-      date: date.toLocaleDateString("en-IN"),
-      sent,
-      delivered,
-      read,
-      failed,
-    };
-  });
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export default function Reports() {
@@ -153,17 +122,22 @@ export default function Reports() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const source = Array.isArray(data) ? data : [];
-
-  const liveRows =
-    source.length > 0 && source[0]?.date ? source : null;
+  // Use backend data only. No generated or synthetic report rows.
+  const source = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.rows)
+      ? data.rows
+      : [];
 
   const rows = useMemo(() => {
-    let result = liveRows
-      ? liveRows
-      : syntheticDailyRows(source, period);
+    let result = [...source];
 
-    if (liveRows && period !== "custom") {
+    const now = new Date();
+    const today = localDay(now);
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    if (period !== "custom") {
       const days =
         period === "today"
           ? 1
@@ -173,65 +147,99 @@ export default function Reports() {
               ? 30
               : 180;
 
-      result = result.slice(-days);
+      const startDate = new Date(today);
+      startDate.setDate(startDate.getDate() - days + 1);
+
+      result = result.filter((r) => {
+        const date = parseReportDate(r.date);
+
+        return date && date >= startDate && date <= endOfToday;
+      });
     }
 
     if (from) {
+      const start = localDay(new Date(`${from}T00:00:00`));
+
       result = result.filter((r) => {
-        const [d, m, y] = r.date.split("/").map(Number);
-        return new Date(y, m - 1, d) >= localDay(new Date(from));
+        const date = parseReportDate(r.date);
+        return date && date >= start;
       });
     }
 
     if (to) {
+      const end = localDay(new Date(`${to}T00:00:00`));
+      end.setHours(23, 59, 59, 999);
+
       result = result.filter((r) => {
-        const [d, m, y] = r.date.split("/").map(Number);
-        return new Date(y, m - 1, d) <= localDay(new Date(to));
+        const date = parseReportDate(r.date);
+        return date && date <= end;
       });
     }
 
     return result;
-  }, [source, period, from, to, liveRows]);
+  }, [source, period, from, to]);
 
-  const summary = rows.reduce(
-    (a, r) => ({
-      sent: a.sent + r.sent,
-      delivered: a.delivered + r.delivered,
-      read: a.read + r.read,
-      failed: a.failed + r.failed,
-    }),
-    { sent: 0, delivered: 0, read: 0, failed: 0 }
+  const summary = useMemo(
+    () =>
+      rows.reduce(
+        (a, r) => {
+          const sent = Number(r.sent || 0);
+          const queued = Number(r.queued || 0);
+          const failed = Number(r.failed || 0);
+
+          return {
+            total: a.total + sent + queued + failed,
+            sent: a.sent + sent,
+            failed: a.failed + failed,
+            queued: a.queued + queued,
+          };
+        },
+        { total: 0, sent: 0, failed: 0, queued: 0 }
+      ),
+    [rows]
   );
+
+  const getSendRate = (r) => {
+    const sent = Number(r.sent || 0);
+    const queued = Number(r.queued || 0);
+    const failed = Number(r.failed || 0);
+    const total = sent + queued + failed;
+
+    return total
+      ? `${((sent / total) * 100).toFixed(1)}%`
+      : "0.0%";
+  };
 
   const columns = [
     { key: "date", label: "Date" },
-    { key: "sent", label: "Sent", render: (r) => n(r.sent) },
     {
-      key: "delivered",
-      label: "Delivered",
-      render: (r) => n(r.delivered),
+      key: "sent",
+      label: "Sent",
+      render: (r) => n(r.sent),
     },
-    { key: "read", label: "Read", render: (r) => n(r.read) },
-    { key: "failed", label: "Failed", render: (r) => n(r.failed) },
+    {
+      key: "queued",
+      label: "Queued",
+      render: (r) => n(r.queued),
+    },
+    {
+      key: "failed",
+      label: "Failed",
+      render: (r) => n(r.failed),
+    },
     {
       key: "rate",
-      label: "Delivery Rate",
-      render: (r) =>
-        r.sent
-          ? `${((r.delivered / r.sent) * 100).toFixed(1)}%`
-          : "0.0%",
+      label: "Send Rate",
+      render: (r) => getSendRate(r),
     },
   ];
 
   const exportRows = rows.map((r) => ({
     Date: r.date,
-    Sent: r.sent,
-    Delivered: r.delivered,
-    Read: r.read,
-    Failed: r.failed,
-    "Delivery Rate": r.sent
-      ? `${((r.delivered / r.sent) * 100).toFixed(1)}%`
-      : "0.0%",
+    Sent: Number(r.sent || 0),
+    Queued: Number(r.queued || 0),
+    Failed: Number(r.failed || 0),
+    "Send Rate": getSendRate(r),
   }));
 
   const exportExcel = () => {
@@ -242,7 +250,10 @@ export default function Reports() {
 
     XLSX.writeFile(
       wb,
-      `${organization.name.replace(/\W+/g, "_")}_${period}_report.xlsx`
+      `${(organization?.name || "Organization").replace(
+        /\W+/g,
+        "_"
+      )}_${period}_report.xlsx`
     );
   };
 
@@ -251,7 +262,7 @@ export default function Reports() {
 
     doc.setFontSize(16);
     doc.text(
-      `${organization.name} - ${
+      `${organization?.name || "Organization"} - ${
         period[0].toUpperCase() + period.slice(1)
       } Report`,
       14,
@@ -267,25 +278,25 @@ export default function Reports() {
 
     autoTable(doc, {
       startY: 31,
-      head: [
-        ["Date", "Sent", "Delivered", "Read", "Failed", "Delivery Rate"],
-      ],
-      body: rows.map((r) => [
-        r.date,
-        r.sent,
-        r.delivered,
-        r.read,
-        r.failed,
-        r.sent
-          ? `${((r.delivered / r.sent) * 100).toFixed(1)}%`
-          : "0.0%",
+      head: [["Date", "Sent", "Queued", "Failed", "Send Rate"]],
+      body: exportRows.map((r) => [
+        r.Date,
+        r.Sent,
+        r.Queued,
+        r.Failed,
+        r["Send Rate"],
       ]),
     });
 
     doc.save(
-      `${organization.name.replace(/\W+/g, "_")}_${period}_report.pdf`
+      `${(organization?.name || "Organization").replace(
+        /\W+/g,
+        "_"
+      )}_${period}_report.pdf`
     );
   };
+
+  const max = Math.max(1, ...rows.map((r) => Number(r.sent || 0)));
 
   if (loading) {
     return (
@@ -295,12 +306,10 @@ export default function Reports() {
     );
   }
 
-  const max = Math.max(1, ...rows.map((r) => r.sent));
-
   return (
     <>
       <PageHeader
-        title={`${organization.name} Reports`}
+        title={`${organization?.name || "Organization"} Reports`}
         subtitle="Today, weekly and monthly WhatsApp messaging performance"
       >
         <button onClick={exportPdf} className="btn-ghost">
@@ -315,7 +324,6 @@ export default function Reports() {
       </PageHeader>
 
       <section className="card mb-6 p-5">
-        {/* Updated filter UI */}
         <div className="mb-5 flex flex-wrap items-end gap-4 rounded-2xl border border-sky-100 bg-gradient-to-r from-white via-sky-50/70 to-emerald-50/60 p-4 shadow-[0_6px_24px_rgba(56,189,248,0.10)]">
           <div className="min-w-[180px] flex-1">
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -330,7 +338,7 @@ export default function Reports() {
               <option value="today">Today</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
-              <option value="custom">Custom range (6 months)</option>
+              <option value="custom">Custom range</option>
             </select>
           </div>
 
@@ -374,40 +382,43 @@ export default function Reports() {
           </button>
         </div>
 
-        {/* Updated colorful summary boxes */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             {
-              label: "Sent",
+              label: "Total Messages",
+              value: summary.total,
+              icon: <FileText size={22} />,
+              styles:
+                "border-violet-500 bg-gradient-to-br from-violet-100/90 via-white to-violet-50 shadow-violet-300/70",
+              iconStyles:
+                "bg-gradient-to-br from-violet-400 to-violet-700",
+            },
+            {
+              label: "Sent Messages",
               value: summary.sent,
               icon: <Send size={22} />,
               styles:
-                "border-violet-500 bg-gradient-to-br from-violet-100/90 via-white to-violet-50 shadow-violet-300/70",
-              iconStyles: "bg-gradient-to-br from-violet-400 to-violet-700",
-            },
-            {
-              label: "Delivered",
-              value: summary.delivered,
-              icon: <CheckCircle2 size={22} />,
-              styles:
                 "border-emerald-500 bg-gradient-to-br from-emerald-100/90 via-white to-emerald-50 shadow-emerald-300/70",
-              iconStyles: "bg-gradient-to-br from-emerald-400 to-emerald-700",
+              iconStyles:
+                "bg-gradient-to-br from-emerald-400 to-emerald-700",
             },
             {
-              label: "Read",
-              value: summary.read,
-              icon: <Eye size={22} />,
-              styles:
-                "border-amber-500 bg-gradient-to-br from-amber-100/90 via-white to-amber-50 shadow-amber-300/70",
-              iconStyles: "bg-gradient-to-br from-amber-400 to-amber-600",
-            },
-            {
-              label: "Failed",
+              label: "Failed Messages",
               value: summary.failed,
               icon: <AlertTriangle size={22} />,
               styles:
                 "border-sky-500 bg-gradient-to-br from-sky-100/90 via-white to-sky-50 shadow-sky-300/70",
-              iconStyles: "bg-gradient-to-br from-sky-400 to-sky-700",
+              iconStyles:
+                "bg-gradient-to-br from-sky-400 to-sky-700",
+            },
+            {
+              label: "Queued Messages",
+              value: summary.queued,
+              icon: <RefreshCw size={22} />,
+              styles:
+                "border-amber-500 bg-gradient-to-br from-amber-100/90 via-white to-amber-50 shadow-amber-300/70",
+              iconStyles:
+                "bg-gradient-to-br from-amber-400 to-amber-600",
             },
           ].map((item) => (
             <div
@@ -434,35 +445,42 @@ export default function Reports() {
         </div>
       </section>
 
-      {/* Existing chart — unchanged */}
       <section className="card mb-6 p-5">
         <h3 className="mb-4 text-lg font-semibold text-brand-900">
           Messages sent by day
         </h3>
 
-        <div className="flex h-56 items-end gap-1 overflow-x-auto">
-          {rows.map((r, i) => (
-            <div
-              title={`${r.date}: ${r.sent} sent`}
-              key={`${r.date}-${i}`}
-              className="flex min-w-[9px] flex-1 flex-col items-center justify-end gap-1"
-            >
+        {rows.length === 0 ? (
+          <p className="py-12 text-center text-sm text-slate-500">
+            No message history available for this filter.
+          </p>
+        ) : (
+          <div className="flex h-56 items-end gap-1 overflow-x-auto">
+            {rows.map((r, i) => (
               <div
-                className="w-full rounded-t-sm bg-gradient-to-t from-brand-800 to-wa"
-                style={{
-                  height: `${Math.max(2, (r.sent / max) * 150)}px`,
-                }}
-              />
+                title={`${r.date}: ${n(r.sent)} sent`}
+                key={`${r.date}-${i}`}
+                className="flex min-w-[9px] flex-1 flex-col items-center justify-end gap-1"
+              >
+                <div
+                  className="w-full rounded-t-sm bg-gradient-to-t from-brand-800 to-wa"
+                  style={{
+                    height: `${Math.max(
+                      2,
+                      (Number(r.sent || 0) / max) * 150
+                    )}px`,
+                  }}
+                />
 
-              <span className="text-[9px] text-slate-500 [writing-mode:vertical-rl]">
-                {r.date}
-              </span>
-            </div>
-          ))}
-        </div>
+                <span className="text-[9px] text-slate-500 [writing-mode:vertical-rl]">
+                  {r.date}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* Existing report details table — unchanged */}
       <section className="card">
         <div className="border-b border-slate-100 px-4 py-4">
           <h3 className="font-semibold text-brand-900">
@@ -476,13 +494,6 @@ export default function Reports() {
 
         <DataTable columns={columns} rows={rows} />
       </section>
-
-      {!liveRows && (
-        <p className="mt-3 text-xs text-slate-500">
-          Demo mode: report totals are distributed across the selected
-          period. Configure backend mode to report actual message history.
-        </p>
-      )}
     </>
   );
 }

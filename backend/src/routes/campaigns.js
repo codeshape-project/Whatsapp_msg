@@ -1085,21 +1085,70 @@ function prepareTemplateComponents(
 
 /* GET CAMPAIGNS */
 
+/* GET CAMPAIGNS WITH LIVE MESSAGE COUNTS */
+
 router.get("/", async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data: campaigns, error } = await supabase
       .from("campaigns")
       .select("*")
       .eq("organization_id", req.organizationId)
       .order("created_at", { ascending: false });
 
     throwIfError(error);
-    res.json({ data: data || [] });
+
+    const campaignRows = campaigns || [];
+
+    if (campaignRows.length === 0) {
+      return res.json({ data: [] });
+    }
+
+    const campaignIds = campaignRows.map((campaign) => campaign.id);
+
+    const { data: messages, error: messagesError } = await supabase
+      .from("messages")
+      .select("campaign_id, status")
+      .eq("organization_id", req.organizationId)
+      .in("campaign_id", campaignIds);
+
+    throwIfError(messagesError);
+
+    const counts = {};
+
+    for (const message of messages || []) {
+      const id = message.campaign_id;
+
+      if (!counts[id]) {
+        counts[id] = {
+          queued: 0,
+          sent: 0,
+          delivered: 0,
+          read: 0,
+          failed: 0,
+        };
+      }
+
+      const status = String(message.status || "").toLowerCase();
+
+      if (Object.prototype.hasOwnProperty.call(counts[id], status)) {
+        counts[id][status]++;
+      }
+    }
+
+    const result = campaignRows.map((campaign) => ({
+      ...campaign,
+      queued_count: counts[campaign.id]?.queued || 0,
+      sent_count: counts[campaign.id]?.sent ?? campaign.sent_count ?? 0,
+      delivered_count: counts[campaign.id]?.delivered || 0,
+      read_count: counts[campaign.id]?.read || 0,
+      failed_count: counts[campaign.id]?.failed ?? campaign.failed_count ?? 0,
+    }));
+
+    res.json({ data: result });
   } catch (error) {
     next(error);
   }
 });
-
 /* CREATE CAMPAIGN */
 
 router.post("/", async (req, res, next) => {
@@ -1450,6 +1499,43 @@ router.get("/:id/messages", async (req, res, next) => {
     res.json({ data: data || [] });
   } catch (error) {
     next(error);
+  }
+});
+router.patch("/:id/cancel", async (req, res) => {
+  try {
+    const organizationId = req.organizationId;
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("campaigns")
+      .update({
+        status: "cancelled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("organization_id", organizationId)
+      .eq("status", "scheduled")
+      .select("id, status")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      return res.status(409).json({
+        error: "Campaign not found or is no longer scheduled.",
+      });
+    }
+
+    return res.json({
+      message: "Scheduled campaign cancelled successfully.",
+      data,
+    });
+  } catch (error) {
+    console.error("[Cancel scheduled campaign]", error);
+
+    return res.status(500).json({
+      error: "Failed to cancel scheduled campaign.",
+    });
   }
 });
 

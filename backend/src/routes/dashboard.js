@@ -180,17 +180,25 @@ router.get('/activity', async (req, res, next) => {
     }
 
     res.json({
-      data: messages.map(message => ({
-        id: message.id,
-        type: 'message',
-        title: `Message ${message.status || 'updated'}`,
-        description:
-          campaignNames[message.campaign_id] || 'WhatsApp message',
-        status: message.status,
-        created_at: message.created_at,
-        timestamp: message.created_at,
-      })),
-    });
+  data: messages.map((message) => ({
+    id: message.id,
+    type: ["delivered", "read", "failed", "scheduled"].includes(
+      message.status
+    )
+      ? message.status
+      : message.status === "sent"
+        ? "completed"
+        : "completed",
+    title: `Message ${
+      message.status || "updated"
+    }`,
+    description:
+      campaignNames[message.campaign_id] || "WhatsApp message",
+    status: message.status,
+    created_at: message.created_at,
+    timestamp: message.created_at,
+  })),
+});
   } catch (error) {
     next(error);
   }

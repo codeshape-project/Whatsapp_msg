@@ -112,7 +112,7 @@ function StatusBadge({ status }) {
 function SummaryBox({ label, value, color }) {
   return (
     <div
-      className="rounded-2xl p-5 transition duration-200 hover:-translate-y-1"
+      className="w-full rounded-2xl p-5 transition duration-300 hover:-translate-y-1"
       style={{
         border: `1.5px solid ${color}`,
         background: `linear-gradient(135deg, ${color}26 0%, #ffffff 70%)`,
@@ -982,29 +982,29 @@ export default function DepartmentContacts() {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-5 md:grid-cols-4">
-        <SummaryBox
-          label="Department Contacts"
-          value={departmentContacts.length}
-          color="#8b5cf6"
-        />
-        <SummaryBox
-          label="Active"
-          value={
-            departmentContacts.filter((contact) => contact.status === "Active")
-              .length
-          }
-          color="#25d366"
-        />
-        <SummaryBox
-          label="Inactive"
-          value={
-            departmentContacts.filter((contact) => contact.status === "Inactive")
-              .length
-          }
-          color="#f59e0b"
-        />
-      </div>
+      <div className="mb-6 grid w-full grid-cols-1 gap-5 sm:grid-cols-3">
+  <SummaryBox
+    label="Department Contacts"
+    value={departmentContacts.length}
+    color="#8b5cf6"
+  />
+
+  <SummaryBox
+    label="Active"
+    value={departmentContacts.filter(
+      (contact) => contact.status === "Active"
+    ).length}
+    color="#25d366"
+  />
+
+  <SummaryBox
+    label="Inactive"
+    value={departmentContacts.filter(
+      (contact) => contact.status === "Inactive"
+    ).length}
+    color="#f59e0b"
+  />
+</div>
 
       <section className="card">
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">

@@ -1,19 +1,22 @@
 
-import { CalendarClock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CalendarClock, XCircle } from "lucide-react";
 import useFetch from "../hooks/useFetch";
 import api from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
-/* ---------- small helpers used only on this page ---------- */
+// ---------- Loader ----------
 
 function Loader() {
   return (
     <div className="flex items-center justify-center gap-3 py-16 text-sm text-slate-500">
       <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand-200 border-t-brand-700" />
-      Loading...
+      Loading scheduled messages...
     </div>
   );
 }
+
+// ---------- Page Header ----------
 
 function PageHeader({ title, subtitle, children }) {
   return (
@@ -22,6 +25,7 @@ function PageHeader({ title, subtitle, children }) {
         <h2 className="text-2xl font-semibold text-brand-900">
           {title}
         </h2>
+
         {subtitle && (
           <p className="text-sm text-slate-600">{subtitle}</p>
         )}
@@ -36,12 +40,13 @@ function PageHeader({ title, subtitle, children }) {
   );
 }
 
+// ---------- Data Table ----------
+
 function DataTable({
   columns = [],
   rows = [],
   empty = "No records found.",
 }) {
-  // Protect the table if the API returns null or unexpected data.
   const safeRows = Array.isArray(rows) ? rows : [];
 
   return (
@@ -49,9 +54,9 @@ function DataTable({
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead>
           <tr className="bg-brand-50 text-xs font-semibold text-brand-900">
-            {columns.map((c) => (
-              <th key={c.key} className="px-4 py-3.5">
-                {c.label}
+            {columns.map((column) => (
+              <th key={column.key} className="px-4 py-3.5">
+                {column.label}
               </th>
             ))}
           </tr>
@@ -69,19 +74,19 @@ function DataTable({
             </tr>
           )}
 
-          {safeRows.map((row, i) => (
+          {safeRows.map((row, index) => (
             <tr
-              key={row.id ?? i}
-              className="hover:bg-brand-50/60"
+              key={row.id ?? index}
+              className="transition-colors hover:bg-brand-50/60"
             >
-              {columns.map((c) => (
+              {columns.map((column) => (
                 <td
-                  key={c.key}
+                  key={column.key}
                   className="px-4 py-3.5 text-slate-700"
                 >
-                  {c.render
-                    ? c.render(row)
-                    : row[c.key]}
+                  {column.render
+                    ? column.render(row)
+                    : row[column.key]}
                 </td>
               ))}
             </tr>
@@ -92,71 +97,124 @@ function DataTable({
   );
 }
 
-/* ---------- the page ---------- */
+// ---------- Scheduled Messages Page ----------
 
 export default function ScheduledMessages() {
   const { organization } = useAuth();
 
-  const {
-    data,
-    setData,
-    loading,
-  } = useFetch(api.getScheduledMessages);
+  const { data, loading } = useFetch(api.getScheduledMessages);
 
-  if (loading) return <Loader />;
+  // Local state replaces setData from useFetch.
+  const [scheduledMessages, setScheduledMessages] = useState([]);
+  const [cancellingId, setCancellingId] = useState(null);
 
-  // Always give DataTable an array.
-  const scheduledMessages = Array.isArray(data) ? data : [];
+  useEffect(() => {
+    if (Array.isArray(data)) {
+      setScheduledMessages(data);
+    }
+  }, [data]);
+
+  // Cancel a scheduled campaign through the backend.
+  const handleCancel = async (id) => {
+    if (!id || cancellingId !== null) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this scheduled campaign?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setCancellingId(id);
+
+      // This must update the campaign in your database.
+      await api.cancelScheduledMessage(id);
+
+      // Remove the row only after the API succeeds.
+      setScheduledMessages((current) =>
+        current.filter((item) => item.id !== id)
+      );
+    } catch (error) {
+      alert(
+        error?.message || "Failed to cancel scheduled campaign."
+      );
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  if (loading) {
+    return <Loader />;
+  }
 
   const columns = [
     {
       key: "campaign",
       label: "Campaign",
-      render: (r) => (
+      render: (row) => (
         <span className="flex items-center gap-2 font-medium text-slate-900">
-          <CalendarClock size={16} className="text-brand-700" />
-          {r.campaign ?? "—"}
+          <CalendarClock size={17} className="shrink-0 text-brand-700" />
+          {row.campaign ?? row.name ?? "—"}
         </span>
       ),
     },
     {
       key: "template",
       label: "Template",
-      render: (r) => (
-        <span className="text-slate-500">
-          {r.template ?? "—"}
+      render: (row) => (
+        <span className="text-slate-600">
+          {row.template ?? row.template_name ?? "—"}
         </span>
       ),
     },
     {
       key: "recipients",
       label: "Recipients",
-      render: (r) =>
-        (Number(r.recipients) || 0).toLocaleString("en-IN"),
+      render: (row) =>
+        (
+          Number(row.recipients ?? row.recipient_count) || 0
+        ).toLocaleString("en-IN"),
     },
     {
       key: "date",
       label: "Scheduled For",
-      render: (r) =>
-        `${r.date ?? "—"}${r.time ? `, ${r.time}` : ""}`,
+      render: (row) => {
+        if (row.date) {
+          return `${row.date}${row.time ? `, ${row.time}` : ""}`;
+        }
+
+        if (row.scheduled_at) {
+          const date = new Date(row.scheduled_at);
+
+          if (!Number.isNaN(date.getTime())) {
+            return date.toLocaleString("en-IN", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            });
+          }
+        }
+
+        return "—";
+      },
     },
     {
       key: "actions",
       label: "Actions",
-      render: (r) => (
-        <button
-          onClick={() =>
-            setData((current) =>
-              (Array.isArray(current) ? current : []).filter(
-                (item) => item.id !== r.id
-              )
-            )
-          }
-          className="text-sm font-medium text-rose-600 hover:underline"
-        >
-          Cancel
-        </button>
-      ),
+      render: (row) => {
+        const isCancelling = cancellingId === row.id;
+
+        return (
+          <button
+            type="button"
+            onClick={() => handleCancel(row.id)}
+            disabled={cancellingId !== null}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm font-semibold text-rose-700 shadow-sm transition-all hover:border-rose-300 hover:bg-rose-600 hover:text-white hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <XCircle size={16} />
+            {isCancelling ? "Cancelling..." : "Cancel"}
+          </button>
+        );
+      },
     },
   ];
 

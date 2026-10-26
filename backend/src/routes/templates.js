@@ -1,169 +1,4 @@
 
-// import { Router } from "express";
-// import {
-//   getApprovedTemplates,
-//   createMetaTemplate,
-// } from "../services/metaWhatsApp.js";
-// import { supabase } from "../db.js";
-// const router = Router();
-
-// router.get("/", async (req, res) => {
-//   try {
-//     if (!req.organizationId) {
-//       return res.status(400).json({
-//         error: "Select a valid organization before loading templates.",
-//       });
-//     }
-
-//    const metaTemplates = await getApprovedTemplates();
-
-// const { data: savedTemplates, error } = await supabase
-//   .from("templates")
-//   .select("meta_name, language, variable_mappings, organization_id")
-//   .eq("organization_id", req.organizationId);
-
-// if (error) throw error;
-
-// const savedByKey = new Map(
-//   (savedTemplates || []).map((template) => [
-//     `${template.meta_name}:${template.language}`,
-//     template,
-//   ])
-// );
-
-// const data = metaTemplates.map((template) => {
-//   const saved = savedByKey.get(
-//     `${template.name}:${template.language}`
-//   );
-
-//   return {
-//     ...template,
-//     variable_mappings: saved?.variable_mappings || [],
-//   };
-// });
-
-//     return res.status(200).json({ data });
-//   } catch (error) {
-//     console.error("GET /api/templates failed:", error.message);
-
-//     return res.status(500).json({
-//       error: "Failed to load WhatsApp templates.",
-//       details: error.message,
-//     });
-//   }
-// });
-
-
-
-// router.post("/", async (req, res) => {
-//   try {
-//     if (!req.organizationId) {
-//       return res.status(400).json({
-//         error: "Select a valid organization before submitting a template.",
-//       });
-//     }
-
-//     const {
-//       name,
-//       category,
-//       language,
-//       header,
-//       body,
-//       footer,
-//       buttons,
-//       variable_mappings = [],
-//     } = req.body;
-
-//     if (!name?.trim() || !body?.trim() || !category || !language) {
-//       return res.status(400).json({
-//         error: "Name, category, language and message body are required.",
-//       });
-//     }
-
-//     if (!Array.isArray(variable_mappings)) {
-//       return res.status(400).json({
-//         error: "variable_mappings must be an array.",
-//       });
-//     }
-
-//     // Only allow known database fields as variable sources.
-//     const allowedSources = new Set([
-//       "contact.name",
-//       "contact.email",
-//       "organization.name",
-//     ]);
-
-//     const positions = new Set();
-
-//     for (const mapping of variable_mappings) {
-//       if (
-//         !Number.isInteger(mapping.position) ||
-//         mapping.position < 1 ||
-//         !allowedSources.has(mapping.source) ||
-//         positions.has(mapping.position)
-//       ) {
-//         return res.status(400).json({
-//           error: "Invalid or duplicate template variable mapping.",
-//         });
-//       }
-
-//       positions.add(mapping.position);
-//     }
-
-//     // Submit the template to Meta first.
-//     const metaData = await createMetaTemplate({
-//       name,
-//       category,
-//       language,
-//       header,
-//       body,
-//       footer,
-//       buttons,
-//     });
-
-//     // Save template and mappings for this organization.
-//     const { data, error } = await supabase
-//       .from("templates")
-//       .upsert(
-//         {
-//           organization_id: req.organizationId,
-//           meta_name: name.trim(),
-//           language,
-//           category,
-//           status: metaData.status || "pending",
-//           body: body.trim(),
-//           variable_mappings,
-//         },
-//         {
-//           onConflict: "organization_id,meta_name,language",
-//         }
-//       )
-//       .select()
-//       .single();
-
-//     if (error) {
-//       throw error;
-//     }
-
-//     return res.status(201).json({
-//       data: {
-//         ...metaData,
-//         variable_mappings: data.variable_mappings,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("POST /api/templates failed:", error.message);
-
-//     return res.status(400).json({
-//       error: error.message || "Failed to submit template to Meta.",
-//     });
-//   }
-// });
-
-
-// export default router;
-
-
 
 import { Router } from "express";
 import {
@@ -273,12 +108,13 @@ router.get("/", async (req, res) => {
         `${template.name}:${template.language}`
       );
 
-      return {
-        ...template,
-        id: saved?.id || template.id,
-        variable_mappings: saved?.variable_mappings || [],
-        mappings_saved: Boolean(saved),
-      };
+     return {
+  ...template,
+  id: saved?.id || null,
+  meta_id: template.id || null,
+  variable_mappings: saved?.variable_mappings || [],
+  mappings_saved: Boolean(saved),
+};
     });
 
     return res.status(200).json({ data });
@@ -466,5 +302,47 @@ router.post("/", async (req, res) => {
     });
   }
 });
+
+
+/* DELETE A SAVED TEMPLATE */
+
+router.delete("/:id", async (req, res) => {
+  try {
+    if (!req.organizationId) {
+      return res.status(400).json({
+        error: "Organization not selected.",
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("templates")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("organization_id", req.organizationId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      return res.status(404).json({
+        error: "Template not found in your organization's database.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Template deleted from database successfully.",
+    });
+  } catch (error) {
+    console.error("Delete template error:", error);
+
+    return res.status(500).json({
+      error: "Failed to delete template from database.",
+      details: error.message,
+    });
+  }
+});
+
 
 export default router;
