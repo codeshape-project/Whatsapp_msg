@@ -215,68 +215,82 @@ router.post("/whatsapp", async (req, res) => {
         }
 
         /* ---------- Delivery status updates ---------- */
+// ---------- Delivery status updates ----------
+for (const statusEvent of value.statuses || []) {
+  const metaMessageId = statusEvent.id;
+  const status = statusEvent.status;
 
-        for (const statusEvent of value.statuses || []) {
-            console.log("[Meta status event]", {
-  id: statusEvent.id,
-  status: statusEvent.status,
-  phoneNumberId,
-});
-          const metaMessageId = statusEvent.id;
-          const status = statusEvent.status;
+  if (!metaMessageId || !status) continue;
 
-          if (!metaMessageId || !status) continue;
+  if (!["sent", "delivered", "read", "failed"].includes(status)) {
+    continue;
+  }
 
-          const timestamp = statusEvent.timestamp
-            ? new Date(
-                Number(statusEvent.timestamp) * 1000
-              ).toISOString()
-            : new Date().toISOString();
+  const timestamp = statusEvent.timestamp
+    ? new Date(Number(statusEvent.timestamp) * 1000).toISOString()
+    : new Date().toISOString();
 
-          const update = {
-            status,
-            updated_at: new Date().toISOString(),
-          };
+  const update = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
 
-          if (status === "sent") {
-            update.sent_at = timestamp;
-          } else if (status === "delivered") {
-            update.delivered_at = timestamp;
-          } else if (status === "read") {
-            update.read_at = timestamp;
-          } else if (status === "failed") {
-            update.last_error = (
-              statusEvent.errors || []
-            )
-              .map((item) => item.title || item.message || "Meta delivery error")
-              .join("; ")
-              .slice(0, 500);
-          }
+  if (status === "sent") {
+    update.sent_at = timestamp;
+  }
 
-         const { data: updatedMessages, error: updateError } =
-  await supabase
+  if (status === "delivered") {
+    update.delivered_at = timestamp;
+  }
+
+  if (status === "read") {
+    update.read_at = timestamp;
+    update.delivered_at = timestamp;
+  }
+
+  if (status === "failed") {
+    update.last_error = (statusEvent.errors || [])
+      .map(
+        (item) =>
+          item.title || item.message || "Meta delivery error"
+      )
+      .join("; ")
+      .slice(0, 500);
+  }
+
+  console.log("[WhatsApp webhook] Status received:", {
+    metaMessageId,
+    status,
+    organizationId,
+    phoneNumberId,
+  });
+
+  const { data, error } = await supabase
     .from("messages")
     .update(update)
     .eq("meta_message_id", metaMessageId)
     .eq("organization_id", organizationId)
     .select("id, status, meta_message_id");
 
-throwIfError(updateError);
+  if (error) {
+    console.error("[WhatsApp webhook] Database update failed:", error);
+    throw error;
+  }
 
-if (!updatedMessages || updatedMessages.length === 0) {
-  console.error("[WhatsApp webhook] No message matched status update:", {
-    metaMessageId,
-    status,
-    organizationId,
-  });
-} else {
-  console.log("[WhatsApp webhook] Message status updated:", {
-    metaMessageId,
-    status,
-    organizationId,
-  });
+  if (!data || data.length === 0) {
+    console.error(
+      "[WhatsApp webhook] No matching message found:",
+      {
+        metaMessageId,
+        status,
+        organizationId,
+      }
+    );
+    continue;
+  }
+
+  console.log("[WhatsApp webhook] Message updated:", data);
 }
-        }
       }
     }
 
