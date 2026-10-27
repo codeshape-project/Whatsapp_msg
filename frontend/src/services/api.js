@@ -348,11 +348,16 @@ cancelScheduledMessage: (id) =>
 
   /* ---------- GENERIC HELPERS ---------- */
 
-  post: (path, payload = {}) =>
-    request(path, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+ 
+post: (path, payload = {}) =>
+  request(path, {
+    method: "POST",
+    body:
+      payload instanceof FormData
+        ? payload
+        : JSON.stringify(payload),
+  }),
+
 
   request,
 
