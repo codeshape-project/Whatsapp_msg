@@ -3,7 +3,7 @@ export const ORGANIZATIONS = [
   { id: "codeshape-hospital", name: "Codeshape Hospital", type: "Hospital", location: "Varanasi, Uttar Pradesh", initials: "CH" },
   { id: "codeshape-school", name: "Codeshape School", type: "School", location: "Varanasi, Uttar Pradesh", initials: "CS" },
   { id: "codeshape-hotel", name: "Codeshape Hotel", type: "Hotel", location: "Varanasi, Uttar Pradesh", initials: "CH" },
-  { id: "codeshape-business", name: "Codeshape Business", type: "Business", location: "Varanasi, Uttar Pradesh", initials: "CB" },
+  { id: "codeshape-business", name: "Codeshape", type: "Business", location: "Varanasi, Uttar Pradesh", initials: "CB" },
 ];
 
 export const HOSPITAL = {

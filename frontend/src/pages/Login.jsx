@@ -16,12 +16,11 @@ import { backendEnabled } from "../lib/supabase";
 const IMAGE_SRC = "/login-illustration.png";
 const LOGO_SRC = "/logo.png";
 
-const ADMIN_EMAILS = {
-  "codeshape-business": "admin@codeshape-business.com",
-  "codeshape-hotel": "admin@codeshape-hotel.com",
-  "codeshape-school": "admin@codeshape-school.com",
-  "codeshape-hospital": "admin@codeshape-hospital.com",
-};
+const BUSINESS_ORGANIZATION = ORGANIZATIONS.find(
+  (org) => org.id === "codeshape-business"
+);
+
+const ADMIN_EMAIL = "admin@codeshape-business.com";
 
 export default function Login() {
   const { login, isAuthenticated } = useAuth();
@@ -30,9 +29,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
-  const [organizationId, setOrganizationId] = useState(
-    ORGANIZATIONS[0]?.id ?? ""
-  );
+  const [organizationId] = useState("codeshape-business");
   const [remember] = useState(true);
   const [loginError, setLoginError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -212,7 +209,7 @@ export default function Login() {
                   aria-label={show ? "Hide password" : "Show password"}
                   className="text-[#4b6b61] hover:text-[#0b5a3c]"
                 >
-                  {show ? <Eye size={16} /> : <EyeOff size={16} />}
+                  
                 </button>
               </label>
 
@@ -238,26 +235,16 @@ export default function Login() {
               {/* Organization selection below Login */}
               
 {/* Organization selection below Login */}
-<label className="block space-y-1.5 pt-1 text-xs font-semibold text-[#0b5a3c]">
-  Select organization
 
-  <select
-    value={organizationId}
-    onChange={handleOrganizationChange}
-    className="login-field w-full rounded-full border border-[#9fd5bd] bg-white/90 px-4 py-2.5 text-xs font-medium text-[#0b5a3c] outline-none transition"
-  >
-    {ORGANIZATIONS.map((org) => {
-      const adminEmail =
-        ADMIN_EMAILS[org.id] || `admin@${org.id}.com`;
+<button
+  type="button"
+  onClick={() => setEmail(ADMIN_EMAIL)}
+  className="flex w-full items-center justify-center gap-2 rounded-full border border-[#9fd5bd] bg-white/80 py-2.5 text-sm font-semibold text-[#0b5a3c] transition hover:bg-[#e8f8ef]"
+>
+  <ShieldCheck size={16} />
+  Admin 
+</button>
 
-      return (
-        <option key={org.id} value={org.id}>
-          {org.name} — {adminEmail}
-        </option>
-      );
-    })}
-  </select>
-</label>
 
             </form>
 

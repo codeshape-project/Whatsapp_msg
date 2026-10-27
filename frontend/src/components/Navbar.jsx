@@ -45,7 +45,7 @@ export default function Navbar({ onMenuClick }) {
           <select aria-label="Switch organization" value={organization.id} onChange={(e) => switchOrganization(e.target.value)} className="max-w-[125px] bg-transparent text-xs font-semibold text-white outline-none sm:max-w-[190px] sm:text-sm [&>option]:text-brand-950">
             {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
           </select>
-          <ChevronDown size={14} className="hidden shrink-0 sm:block" />
+          
         </label>
         <div className="text-right leading-tight">
           <p className="text-xs font-medium text-white sm:text-sm">
