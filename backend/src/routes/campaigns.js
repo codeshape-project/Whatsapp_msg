@@ -970,8 +970,12 @@
 
 import { Router } from "express";
 import { supabase } from "../db.js";
-import { sendTemplate } from "../services/metaWhatsApp.js";
+import {
+  sendTemplate,
+  getApprovedTemplates,
+} from "../services/metaWhatsApp.js";
 import { config } from "../config.js";
+
 const router = Router();
 
 const MAX_RECIPIENTS_PER_BATCH = 500;
@@ -1020,6 +1024,17 @@ function prepareTemplateComponents(
 
   const actualPositions = getPlaceholderPositions(templateBody);
 
+  // No placeholders means no mapping components are required.
+  if (actualPositions.length === 0) {
+    if (mappings.length > 0) {
+      throw new Error(
+        "The template has no body placeholders, but mappings were saved."
+      );
+    }
+
+    return [];
+  }
+
   const normalizedMappings = mappings.map((mapping) => ({
     position: Number(mapping.position),
     source: mapping.source,
@@ -1060,7 +1075,11 @@ function prepareTemplateComponents(
   );
 
   const parameters = sortedMappings.map((mapping) => {
-    const value = resolveMapping(mapping.source, contact, organization);
+    const value = resolveMapping(
+      mapping.source,
+      contact,
+      organization
+    );
 
     if (
       value === null ||
@@ -1082,8 +1101,6 @@ function prepareTemplateComponents(
     ? [{ type: "body", parameters }]
     : [];
 }
-
-/* GET CAMPAIGNS */
 
 /* GET CAMPAIGNS WITH LIVE MESSAGE COUNTS */
 
@@ -1149,6 +1166,7 @@ router.get("/", async (req, res, next) => {
     next(error);
   }
 });
+
 /* CREATE CAMPAIGN */
 
 router.post("/", async (req, res, next) => {
@@ -1277,8 +1295,7 @@ router.post("/:id/send", async (req, res, next) => {
     }
 
     /*
-     * Find mappings belonging to this organization, template name
-     * and exact language.
+     * First try the configuration saved for this organization.
      */
     const { data: savedTemplate, error: templateError } = await supabase
       .from("templates")
@@ -1290,17 +1307,47 @@ router.post("/:id/send", async (req, res, next) => {
 
     throwIfError(templateError);
 
-    if (!savedTemplate) {
-      return res.status(400).json({
-        error:
-          `No saved configuration was found for template "${campaign.template_name}" ` +
-          `with language "${campaign.language}" in this organization. ` +
-          "Open Templates, save the mappings for this existing Meta template, " +
-          "and then retry the campaign.",
-      });
-    }
+    let templateBody = savedTemplate?.body || "";
+    let mappings = savedTemplate?.variable_mappings || [];
 
-    const mappings = savedTemplate.variable_mappings;
+    /*
+     * If there is no saved configuration, inspect the real Meta
+     * template. Only templates with no body placeholders can proceed
+     * without a saved mapping record.
+     */
+    if (!savedTemplate) {
+      const metaTemplates = await getApprovedTemplates();
+
+      const metaTemplate = metaTemplates.find(
+        (template) =>
+          template.name === campaign.template_name &&
+          template.language === campaign.language &&
+          String(template.status).toLowerCase() === "approved"
+      );
+
+      if (!metaTemplate) {
+        return res.status(400).json({
+          error:
+            `Approved Meta template "${campaign.template_name}" ` +
+            `with language "${campaign.language}" was not found. ` +
+            "Check the template name and exact Meta language code.",
+        });
+      }
+
+      templateBody = metaTemplate.body || "";
+
+      const placeholderPositions = getPlaceholderPositions(templateBody);
+
+      if (placeholderPositions.length > 0) {
+        return res.status(400).json({
+          error:
+            `Template "${campaign.template_name}" contains body placeholders. ` +
+            "Open Templates and save its variable mappings before sending.",
+        });
+      }
+
+      mappings = [];
+    }
 
     if (!Array.isArray(mappings)) {
       return res.status(400).json({
@@ -1308,13 +1355,28 @@ router.post("/:id/send", async (req, res, next) => {
       });
     }
 
-    if (typeof savedTemplate.body !== "string") {
+    if (typeof templateBody !== "string") {
       return res.status(400).json({
-        error:
-          "The saved template body is missing. Refresh the template and save its mappings again.",
+        error: "The template body is missing.",
       });
     }
 
+    const actualPositions = getPlaceholderPositions(templateBody);
+
+    if (
+      actualPositions.length > 0 &&
+      mappings.length === 0
+    ) {
+      return res.status(400).json({
+        error:
+          `Template "${campaign.template_name}" contains placeholders. ` +
+          "Save its variable mappings before sending.",
+      });
+    }
+
+    /*
+     * Load organization details for organization.name mappings.
+     */
     const { data: organization, error: organizationError } = await supabase
       .from("organizations")
       .select("name")
@@ -1323,6 +1385,9 @@ router.post("/:id/send", async (req, res, next) => {
 
     throwIfError(organizationError);
 
+    /*
+     * Load the next batch of queued messages.
+     */
     const { data: queued, error: queuedError } = await supabase
       .from("messages")
       .select("id, contact_id, contacts(id, name, phone, email, opted_in)")
@@ -1368,40 +1433,40 @@ router.post("/:id/send", async (req, res, next) => {
 
         const components = prepareTemplateComponents(
           mappings,
-          savedTemplate.body,
+          templateBody,
           contact,
           organization
         );
 
         const result = await sendTemplate({
-  to: contact.phone,
-  name: campaign.template_name,
-  language: campaign.language,
-  components,
-});
+          to: contact.phone,
+          name: campaign.template_name,
+          language: campaign.language,
+          components,
+        });
 
-const metaId = result?.messages?.[0]?.id || null;
-const sentAt = result.sentAt || new Date().toISOString();
+        const metaId = result?.messages?.[0]?.id || null;
+        const sentAt = result?.sentAt || new Date().toISOString();
 
-const { error: updateMessageError } = await supabase
-  .from("messages")
-  .update({
-    status: "sent",
-    meta_message_id: metaId,
-    direction: "outgoing",
-    message_type: "template",
-    message_body: savedTemplate.body,
-    message_timestamp: sentAt,
-    sender_phone: config.metaPhoneNumberId || null,
-    recipient_phone: contact.phone,
-    sent_at: sentAt,
-    last_error: null,
-  })
-  .eq("organization_id", req.organizationId)
-  .eq("id", item.id);
+        const { error: updateMessageError } = await supabase
+          .from("messages")
+          .update({
+            status: "sent",
+            meta_message_id: metaId,
+            direction: "outgoing",
+            message_type: "template",
+            message_body: templateBody,
+            message_timestamp: sentAt,
+            sender_phone: config.metaPhoneNumberId || null,
+            recipient_phone: contact.phone,
+            sent_at: sentAt,
+            last_error: null,
+          })
+          .eq("organization_id", req.organizationId)
+          .eq("id", item.id);
 
-throwIfError(updateMessageError);
-sent++;
+        throwIfError(updateMessageError);
+        sent++;
       } catch (sendError) {
         const message = String(
           sendError?.message || sendError
@@ -1421,6 +1486,9 @@ sent++;
       }
     }
 
+    /*
+     * Check whether more queued messages remain.
+     */
     const { count: remainingCount, error: remainingError } =
       await supabase
         .from("messages")
@@ -1501,6 +1569,9 @@ router.get("/:id/messages", async (req, res, next) => {
     next(error);
   }
 });
+
+/* CANCEL SCHEDULED CAMPAIGN */
+
 router.patch("/:id/cancel", async (req, res) => {
   try {
     const organizationId = req.organizationId;
