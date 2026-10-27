@@ -979,7 +979,7 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
         group_name: department.name,
         department_id: department.id,
         branch_id: department.branch_id ?? null,
-        opted_in: consentConfirmed,
+        opted_in: true,
         consent_source: consentConfirmed ? consentSource : null,
         consent_updated_at: consentConfirmed
           ? new Date().toISOString()
