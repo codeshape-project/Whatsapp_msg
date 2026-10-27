@@ -16,11 +16,11 @@ import { backendEnabled } from "../lib/supabase";
 const IMAGE_SRC = "/login-illustration.png";
 const LOGO_SRC = "/logo.png";
 
-const BUSINESS_ORGANIZATION = ORGANIZATIONS.find(
-  (org) => org.id === "codeshape-business"
+const SCHOOL_ORGANIZATION = ORGANIZATIONS.find(
+  (org) => org.id === "codeshape-school"
 );
 
-const ADMIN_EMAIL = "admin@codeshape-business.com";
+const ADMIN_EMAIL = "admin@codeshape-school.com";
 
 export default function Login() {
   const { login, isAuthenticated } = useAuth();
@@ -29,7 +29,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
-  const [organizationId] = useState("codeshape-business");
+  const [organizationId] = useState("codeshape-school");
   const [remember] = useState(true);
   const [loginError, setLoginError] = useState("");
   const [busy, setBusy] = useState(false);
