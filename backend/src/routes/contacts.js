@@ -241,6 +241,11 @@ router.patch('/:id/consent', async (req, res, next) => {
 
 router.post('/import', upload.single('file'), async (req, res, next) => {
   try {
+
+    const selectedDepartment = String(
+      req.body?.department_name || ''
+    ).trim();
+    
     if (!req.file) {
       return res.status(400).json({
         error: 'Choose an Excel or CSV file first.',
@@ -361,9 +366,10 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
 
       const consentConfirmed = optedIn && Boolean(consentSource);
 
-      const group = String(
-        firstValue(lower, ['group', 'group_name', 'group name'])
-      ).trim();
+     const group = selectedDepartment ||
+  String(
+    firstValue(lower, ['group', 'group_name', 'group name'])
+  ).trim();
 
       const email = String(
         firstValue(lower, ['email', 'email address'])

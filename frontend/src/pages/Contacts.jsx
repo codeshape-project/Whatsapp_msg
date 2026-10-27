@@ -690,23 +690,28 @@ export default function Contacts() {
     setBusy(true);
 
     try {
-      if (api.isBackendEnabled) {
-        const result = await api.importContacts(file);
+     if (api.isBackendEnabled) {
+  const formData = new FormData();
 
-        const freshResponse = await api.getContacts();
-        const freshContacts = getContactArray(freshResponse);
+  formData.append("file", file);
+  formData.append("department_name", department.name);
 
-        setContacts(freshContacts.map(normalizeContact));
+  const result = await api.post("/contacts/import", formData);
 
-        setNotice({
-          type: "success",
-          text: `Import complete: ${result?.imported ?? 0} contacts imported; ${
-            result?.invalidCount ?? 0
-          } rows need correction.`,
-        });
+  const freshResponse = await api.getContacts();
+  const freshContacts = getContactArray(freshResponse);
 
-        return;
-      }
+  setContacts(freshContacts.map(normalizeContact));
+
+  setNotice({
+    type: "success",
+    text: `Import complete: ${result?.imported ?? 0} contacts imported; ${
+      result?.invalidCount ?? 0
+    } rows need correction.`,
+  });
+
+  return;
+}
 
       const workbook = XLSX.read(await file.arrayBuffer());
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
