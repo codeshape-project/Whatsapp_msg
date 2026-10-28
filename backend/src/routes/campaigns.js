@@ -2138,28 +2138,35 @@ router.post("/:id/send", async (req, res, next) => {
           components,
         });
 
-        const metaId = result?.messages?.[0]?.id || null;
-        const sentAt = result?.sentAt || new Date().toISOString();
+        const metaId = result?.messages?.[0]?.id;
 
-        const { error: updateMessageError } = await supabase
-          .from("messages")
-          .update({
-            status: "sent",
-            meta_message_id: metaId,
-            direction: "outgoing",
-            message_type: "template",
-            message_body: templateBody,
-            message_timestamp: sentAt,
-            sender_phone: config.metaPhoneNumberId || null,
-            recipient_phone: contact.phone,
-            sent_at: sentAt,
-            last_error: null,
-          })
-          .eq("organization_id", req.organizationId)
-          .eq("id", item.id);
+if (!metaId) {
+  throw new Error(
+    `Meta returned no WhatsApp message ID. Response: ${JSON.stringify(result)}`
+  );
+}
 
-        throwIfError(updateMessageError);
-        sent++;
+const sentAt = result?.sentAt || new Date().toISOString();
+
+const { error: updateMessageError } = await supabase
+  .from("messages")
+  .update({
+    status: "sent",
+    meta_message_id: metaId,
+    direction: "outgoing",
+    message_type: "template",
+    message_body: templateBody,
+    message_timestamp: sentAt,
+    sender_phone: config.metaPhoneNumberId || null,
+    recipient_phone: contact.phone,
+    sent_at: sentAt,
+    last_error: null,
+  })
+  .eq("organization_id", req.organizationId)
+  .eq("id", item.id);
+
+throwIfError(updateMessageError);
+sent++;
       } catch (sendError) {
         const message = String(
           sendError?.message || sendError
