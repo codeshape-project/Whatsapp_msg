@@ -30,7 +30,7 @@ export const config = {
   metaAccessToken: process.env.META_ACCESS_TOKEN || '',
   metaVerifyToken: process.env.META_VERIFY_TOKEN || '',
   metaAppSecret: process.env.META_APP_SECRET || '',
-
+metaAppId: process.env.META_APP_ID,
   maxImportRows: Number(process.env.MAX_IMPORT_ROWS || 5000),
 
   nodeEnv: process.env.NODE_ENV || 'development',

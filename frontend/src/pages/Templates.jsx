@@ -1253,7 +1253,10 @@ const emptyForm = {
   name: "",
   category: "Marketing",
   language: "English",
+  headerFormat: "NONE",
   header: "",
+  imageBase64: "",
+  imageMimeType: "image/jpeg",
   body: "",
   footer: "",
   buttons: [],
@@ -1289,6 +1292,41 @@ function TemplateEditor({ initialTemplate, onClose, onSave, saving }) {
   function updateField(field, value) {
     setForm((previous) => ({ ...previous, [field]: value }));
   }
+
+  function handleHeaderImageChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!["image/jpeg", "image/png"].includes(file.type)) {
+    alert("Please select a JPEG or PNG image.");
+    event.target.value = "";
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert("Image must be 5 MB or smaller.");
+    event.target.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    setForm((previous) => ({
+      ...previous,
+      headerFormat: "IMAGE",
+      imageBase64: String(reader.result || ""),
+      imageMimeType: file.type,
+      header: "",
+    }));
+  };
+
+  reader.onerror = () => {
+    alert("Unable to read the selected image.");
+  };
+
+  reader.readAsDataURL(file);
+}
 
   function addButton() {
     if (form.buttons.length >= 3) {
@@ -1421,20 +1459,27 @@ function TemplateEditor({ initialTemplate, onClose, onSave, saving }) {
       return;
     }
 
-    onSave({
-      name: normalizedName,
-      category: form.category,
-      language: form.language,
-      header: form.header.trim(),
-      body: form.body.trim(),
-      footer: form.footer.trim(),
-      buttons: form.buttons.map(({ id, ...button }) => ({
-        ...button,
-        text: button.text.trim(),
-        value: button.value.trim(),
-      })),
-      variable_mappings: form.variable_mappings || [],
-    });
+   
+onSave({
+  name: normalizedName,
+  category: form.category,
+  language: form.language,
+  headerFormat: form.headerFormat || "NONE",
+  header:
+    form.headerFormat === "TEXT" ? form.header.trim() : "",
+  imageBase64:
+    form.headerFormat === "IMAGE" ? form.imageBase64 : "",
+  imageMimeType: form.imageMimeType || "image/jpeg",
+  body: form.body.trim(),
+  footer: form.footer.trim(),
+  buttons: form.buttons.map(({ id, ...button }) => ({
+    ...button,
+    text: button.text.trim(),
+    value: button.value.trim(),
+  })),
+  variable_mappings: form.variable_mappings || [],
+});
+
   }
 
   const placeholders = [
@@ -1546,65 +1591,167 @@ function TemplateEditor({ initialTemplate, onClose, onSave, saving }) {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-emerald-100 p-4 sm:p-5">
-                <h3 className="mb-4 font-semibold text-slate-900">
-                  Message Content
-                </h3>
+              
+<section className="rounded-2xl border border-emerald-100 p-4 sm:p-5">
+  <h3 className="mb-4 font-semibold text-slate-900">
+    Message Content
+  </h3>
 
-                <div className="space-y-4">
-                  <label className={labelClass}>
-                    Header (Optional)
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. Appointment Confirmation"
-                      maxLength={60}
-                      value={form.header || ""}
-                      onChange={(event) =>
-                        updateField("header", event.target.value)
-                      }
-                      disabled={isExistingTemplate || saving}
-                    />
-                  </label>
+  {/* 1. Header options */}
+  <div className="space-y-4">
+    <div>
+      <label className={`${labelClass} mb-2 block`}>
+        Header (Optional)
+      </label>
 
-                  <label className={labelClass}>
-                    Message Body
-                    <textarea
-                      className={`${inputClass} min-h-36 resize-y`}
-                      placeholder="Hello {{1}}, your appointment is confirmed for {{2}}."
-                      value={form.body || ""}
-                      onChange={(event) =>
-                        updateField("body", event.target.value)
-                      }
-                      maxLength={1024}
-                      disabled={isExistingTemplate || saving}
-                      required
-                    />
-                    <span className="mt-1 block text-right text-xs text-slate-500">
-                      {(form.body || "").length}/1024 characters
-                    </span>
-                  </label>
+      <select
+        value={form.headerFormat || "NONE"}
+        disabled={isExistingTemplate || saving}
+        onChange={(event) => {
+          const headerFormat = event.target.value;
 
-                  <div className="rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-900">
-                    <strong>Personalize your message:</strong> use placeholders
-                    such as {"{{1}}"} and {"{{2}}"} for values you will provide
-                    when sending the campaign.
-                  </div>
+          setForm((previous) => ({
+            ...previous,
+            headerFormat,
+            header: "",
+            imageBase64: "",
+            imageMimeType: "image/jpeg",
+          }));
+        }}
+        className={inputClass}
+      >
+        <option value="NONE">No Header</option>
+        <option value="TEXT">Text Header</option>
+        <option value="IMAGE">Image Header</option>
+        <option value="VIDEO">Video Header</option>
+        <option value="DOCUMENT">Document Header</option>
+      </select>
+    </div>
 
-                  <label className={labelClass}>
-                    Footer (Optional)
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. Thank you for choosing us"
-                      maxLength={60}
-                      value={form.footer || ""}
-                      onChange={(event) =>
-                        updateField("footer", event.target.value)
-                      }
-                      disabled={isExistingTemplate || saving}
-                    />
-                  </label>
-                </div>
-              </section>
+    {/* 2. Show the selected header's input */}
+    {form.headerFormat === "TEXT" && (
+      <div>
+        <label className={`${labelClass} mb-2 block`}>
+          Header Text *
+        </label>
+
+        <input
+          type="text"
+          value={form.header || ""}
+          onChange={(event) =>
+            updateField("header", event.target.value)
+          }
+          placeholder="e.g. Appointment Confirmation"
+          maxLength={60}
+          disabled={isExistingTemplate || saving}
+          required
+          className={inputClass}
+        />
+      </div>
+    )}
+
+    {form.headerFormat === "IMAGE" && (
+      <div>
+        <label className={`${labelClass} mb-2 block`}>
+          Header Image *
+        </label>
+
+        <input
+          type="file"
+          accept="image/jpeg,image/png"
+          onChange={handleHeaderImageChange}
+          disabled={isExistingTemplate || saving}
+          className={inputClass}
+          required={!form.imageBase64}
+        />
+
+        {form.imageBase64 && (
+          <img
+            src={form.imageBase64}
+            alt="Header preview"
+            className="mt-3 max-h-48 rounded-xl border border-emerald-100 object-contain"
+          />
+        )}
+
+        <p className="mt-2 text-xs text-slate-500">
+          Choose a JPEG or PNG image up to 5 MB.
+        </p>
+      </div>
+    )}
+
+    {form.headerFormat === "VIDEO" && (
+      <div>
+        <label className={`${labelClass} mb-2 block`}>
+          Header Video
+        </label>
+
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          Video header selection requires video upload and backend
+          support before submission.
+        </p>
+      </div>
+    )}
+
+    {form.headerFormat === "DOCUMENT" && (
+      <div>
+        <label className={`${labelClass} mb-2 block`}>
+          Header Document
+        </label>
+
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          Document header selection requires document upload and
+          backend support before submission.
+        </p>
+      </div>
+    )}
+  </div>
+
+  {/* 3. Message body */}
+  <div className="mt-5">
+    <label className={`${labelClass} mb-2 block`}>
+      Message Body *
+    </label>
+
+    <textarea
+      value={form.body || ""}
+      onChange={(event) => updateField("body", event.target.value)}
+      placeholder="Hello {{1}}, your appointment is confirmed for {{2}}."
+      rows={6}
+      maxLength={1024}
+      disabled={isExistingTemplate || saving}
+      required
+      className={`${inputClass} resize-y`}
+    />
+
+    <div className="mt-1 text-right text-xs text-slate-500">
+      {(form.body || "").length}/1024 characters
+    </div>
+
+    <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900">
+      <strong>Personalize your message:</strong> use placeholders
+      such as {"{{1}}"} and {"{{2}}"} for values you will provide
+      when sending the campaign.
+    </div>
+  </div>
+
+  {/* 4. Footer */}
+  <div className="mt-5">
+    <label className={`${labelClass} mb-2 block`}>
+      Footer (Optional)
+    </label>
+
+    <input
+      type="text"
+      value={form.footer || ""}
+      onChange={(event) => updateField("footer", event.target.value)}
+      placeholder="e.g. Thank you for choosing us"
+      disabled={isExistingTemplate || saving}
+      maxLength={60}
+      className={inputClass}
+    />
+  </div>
+</section>
+
 
               {/* Database Variable Mapping */}
               <section className="rounded-2xl border border-emerald-100 p-4 sm:p-5">
@@ -1912,11 +2059,19 @@ function TemplateEditor({ initialTemplate, onClose, onSave, saving }) {
 
                 <div className="min-h-80 rounded-b-2xl bg-[#efe7dc] p-4">
                   <div className="ml-auto max-w-sm overflow-hidden rounded-xl rounded-tr-none bg-[#d9fdd3] shadow-sm">
-                    {form.header && (
-                      <div className="px-3 pt-3 text-sm font-bold text-slate-900">
-                        {form.header}
-                      </div>
-                    )}
+                    {form.headerFormat === "IMAGE" && form.imageBase64 && (
+  <img
+    src={form.imageBase64}
+    alt="WhatsApp template header"
+    className="max-h-48 w-full rounded-t-lg object-contain"
+  />
+)}
+
+{form.headerFormat === "TEXT" && form.header && (
+  <div className="px-3 pt-3 text-sm font-bold text-slate-900">
+    {form.header}
+  </div>
+)}
 
                     <div className="whitespace-pre-wrap break-words px-3 py-3 text-sm leading-6 text-slate-800">
                       {form.body || "Your message will appear here..."}
