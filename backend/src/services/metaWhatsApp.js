@@ -580,6 +580,7 @@ export async function getApprovedTemplates() {
   });
 }
 
+
 export async function createMetaTemplate({
   name,
   category,
@@ -610,8 +611,24 @@ export async function createMetaTemplate({
     throw new Error("Message body is required.");
   }
 
+  // Validate the category selected in the UI.
+  const normalizedCategory = String(category || "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    !["UTILITY", "MARKETING", "AUTHENTICATION"].includes(
+      normalizedCategory
+    )
+  ) {
+    throw new Error(
+      `Invalid template category: "${category}". Select Utility, Marketing, or Authentication.`
+    );
+  }
+
   const format = String(headerFormat || "NONE").toUpperCase();
   const components = [];
+
   let headerMediaId = null;
   let headerMediaHandle = null;
 
@@ -626,12 +643,13 @@ export async function createMetaTemplate({
   } else if (format === "IMAGE") {
     const buffer = decodeImage(imageBase64, imageMimeType);
 
-    // Separate identifiers are required for template approval and sending.
+    // Template approval requires an example media handle.
     headerMediaHandle = await uploadTemplateExampleImage(
       buffer,
       imageMimeType
     );
 
+    // Separate media ID for sending messages.
     headerMediaId = await uploadWhatsAppMedia({
       imageBase64,
       mimeType: imageMimeType,
@@ -645,7 +663,9 @@ export async function createMetaTemplate({
       },
     });
   } else if (format !== "NONE") {
-    throw new Error("Header format must be None, Text, or Image.");
+    throw new Error(
+      "Header format must be None, Text, or Image."
+    );
   }
 
   components.push({
@@ -671,6 +691,7 @@ export async function createMetaTemplate({
             url: button.value,
           };
         }
+
         if (button.type === "Phone Call") {
           return {
             type: "PHONE_NUMBER",
@@ -678,6 +699,7 @@ export async function createMetaTemplate({
             phone_number: button.value,
           };
         }
+
         return {
           type: "QUICK_REPLY",
           text: button.text,
@@ -685,6 +707,13 @@ export async function createMetaTemplate({
       }),
     });
   }
+
+  // Log the submitted category for debugging.
+  console.log("[Meta Template] Submitting template:", {
+    name: normalizedName,
+    category: normalizedCategory,
+    language: getLanguageCode(language),
+  });
 
   const response = await fetch(
     graphUrl(`${config.metaWabaId}/message_templates`),
@@ -697,7 +726,7 @@ export async function createMetaTemplate({
       body: JSON.stringify({
         name: normalizedName,
         language: getLanguageCode(language),
-        category: String(category || "MARKETING").toUpperCase(),
+        category: normalizedCategory,
         components,
       }),
     }
@@ -706,7 +735,11 @@ export async function createMetaTemplate({
   const result = await readJson(response);
 
   if (!response.ok) {
-    throwMetaError(result, response.status, "Meta template submission failed");
+    throwMetaError(
+      result,
+      response.status,
+      "Meta template submission failed"
+    );
   }
 
   return {
@@ -714,6 +747,7 @@ export async function createMetaTemplate({
     metaId: result.id,
     name: normalizedName,
     language: getLanguageCode(language),
+    category: normalizedCategory,
     status: "Pending",
     headerFormat: format,
     headerMediaId,
@@ -721,6 +755,7 @@ export async function createMetaTemplate({
     message: "Template submitted to Meta for review.",
   };
 }
+
 
 export async function sendTemplate({
   to,
