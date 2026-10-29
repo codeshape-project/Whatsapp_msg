@@ -14,67 +14,152 @@ router.get("/", async (req, res, next) => {
       });
     }
 
-    // Fetch actual message records from the last 180 days.
+    // Fetch messages from the last 180 days.
     const since = new Date();
     since.setDate(since.getDate() - 179);
     since.setHours(0, 0, 0, 0);
 
-    const { data, error } = await supabase
+    // Fetch messages with their associated campaigns.
+    const { data: messages, error: messagesError } = await supabase
       .from("messages")
-      .select("status, created_at, sent_at")
+      .select(`
+        id,
+        organization_id,
+        status,
+        created_at,
+        sent_at,
+        campaign_id,
+        campaigns!inner (
+          id,
+          name,
+          department_id,
+          branch_id,
+          departments (
+            id,
+            name
+          ),
+          branches (
+            id,
+            name
+          )
+        )
+      `)
       .eq("organization_id", organizationId)
       .gte("created_at", since.toISOString())
       .order("created_at", { ascending: true })
       .limit(10000);
 
-    if (error) throw error;
+    if (messagesError) throw messagesError;
 
     const byDate = new Map();
+    const byDepartment = new Map();
 
-    for (const message of data || []) {
-      const timestamp = message.created_at;
+    function getStatusGroup(status) {
+      const value = String(status || "").toLowerCase();
 
-      if (!timestamp) continue;
+      if (value === "queued") return "queued";
+      if (value === "failed") return "failed";
 
-      // Use the database creation date for reporting.
-      const dateKey = new Date(timestamp).toLocaleDateString(
-        "en-CA",
-        { timeZone: "Asia/Kolkata" }
+      if (["sent", "delivered", "read"].includes(value)) {
+        return "sent";
+      }
+
+      return null;
+    }
+
+    function getDateKey(timestamp) {
+      if (!timestamp) return null;
+
+      const date = new Date(timestamp);
+
+      if (Number.isNaN(date.getTime())) return null;
+
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date);
+
+      const values = Object.fromEntries(
+        parts.map(({ type, value }) => [type, value])
       );
 
-      if (!dateKey || dateKey === "Invalid Date") continue;
+      return `${values.year}-${values.month}-${values.day}`;
+    }
 
-      if (!byDate.has(dateKey)) {
-        byDate.set(dateKey, {
-          date: new Date(`${dateKey}T00:00:00`).toLocaleDateString(
-            "en-IN",
-            { timeZone: "Asia/Kolkata" }
-          ),
+    function getDisplayDate(dateKey) {
+      const [year, month, day] = dateKey.split("-");
+      return `${day}/${month}/${year}`;
+    }
+
+    function createCounts() {
+      return {
+        sent: 0,
+        queued: 0,
+        failed: 0,
+      };
+    }
+
+    for (const message of messages || []) {
+      const statusGroup = getStatusGroup(message.status);
+
+      // Ignore statuses not included in these report totals.
+      if (!statusGroup) continue;
+
+      const dateKey = getDateKey(message.created_at);
+
+      if (dateKey) {
+        if (!byDate.has(dateKey)) {
+          byDate.set(dateKey, {
+            date: getDisplayDate(dateKey),
+            sent: 0,
+            queued: 0,
+            failed: 0,
+          });
+        }
+
+        byDate.get(dateKey)[statusGroup] += 1;
+      }
+
+      const campaign = message.campaigns;
+
+      if (!campaign) continue;
+
+      const departmentId = campaign.department_id || null;
+      const department = campaign.departments;
+      const branch = campaign.branches;
+
+      // Include standalone departments and campaigns without a department.
+      const key = departmentId || "__unassigned__";
+
+      if (!byDepartment.has(key)) {
+        byDepartment.set(key, {
+          department_id: departmentId,
+          department: department?.name || "Unassigned",
+          branch_id: campaign.branch_id || null,
+          branch: branch?.name || "No branch",
           sent: 0,
           queued: 0,
           failed: 0,
         });
       }
 
-      const row = byDate.get(dateKey);
-      const status = String(message.status || "").toLowerCase();
-
-      if (status === "queued") {
-        row.queued += 1;
-      } else if (status === "failed") {
-        row.failed += 1;
-      } else if (
-        ["sent", "delivered", "read"].includes(status)
-      ) {
-        // Delivered and read messages have already been sent.
-        row.sent += 1;
-      }
+      byDepartment.get(key)[statusGroup] += 1;
     }
 
-    const reports = [...byDate.values()];
+    const rows = [...byDate.entries()]
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+      .map(([, row]) => row);
+
+    const departmentRows = [...byDepartment.values()].sort(
+      (a, b) => a.department.localeCompare(b.department)
+    );
 
     return res.json({
-      data: reports,
+      data: rows,
+      rows,
+      departmentRows,
     });
   } catch (error) {
     next(error);
