@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-
+import cronRoutes from "./routes/cron.js";
 import { config } from './config.js';
 import { supabase } from './db.js';
 import { requireAuth } from './middleware/auth.js';
@@ -93,6 +93,7 @@ app.use('/api/campaigns', requireAuth, campaigns);
 app.use('/api/templates', requireAuth, templates);
 app.use('/api/reports', requireAuth, reports);
 app.use("/api/master", requireAuth, masterManagement);
+app.use("/api/cron", cronRoutes);
 app.use((req, res) => {
   res.status(404).json({
     error: `Route not found: ${req.method} ${req.path}`

@@ -950,41 +950,51 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
 
       // A phone number alone is not evidence of WhatsApp consent.
       // Opt-in requires an explicit value and a consent source.
-      const optedIn = normalizeConsent(
-        firstValue(lower, [
-          'opted_in',
-          'opted in',
-          'whatsapp_consent',
-          'whatsapp consent',
-        ])
-      );
+     // Read consent information from the Excel row.
+const optedIn = normalizeConsent(
+  firstValue(lower, [
+    'opted_in',
+    'opted in',
+    'whatsapp_consent',
+    'whatsapp consent',
+  ])
+);
 
-      const consentSource = String(
-        firstValue(lower, ['consent_source', 'consent source'])
-      ).trim();
+const consentSource = String(
+  firstValue(lower, [
+    'consent_source',
+    'consent source',
+  ])
+).trim();
 
-      const consentConfirmed = optedIn && Boolean(consentSource);
+// Consent is confirmed only when the Excel row explicitly
+// indicates opt-in.
+const consentConfirmed = optedIn;
 
       const email = String(
         firstValue(lower, ['email', 'email address'])
       ).trim();
 
       accepted.push({
-        organization_id: req.organizationId,
-        name,
-        phone,
-        email: email || null,
-        // The selected department is the group for every row in this file.
-        // The Excel "Group" column is ignored on purpose.
-        group_name: department.name,
-        department_id: department.id,
-        branch_id: department.branch_id ?? null,
-        opted_in: consentConfirmed,
-        consent_source: consentConfirmed ? consentSource : null,
-        consent_updated_at: consentConfirmed
-          ? new Date().toISOString()
-          : null,
-      });
+  organization_id: req.organizationId,
+  name,
+  phone,
+  email: email || null,
+
+  // Use the department selected in the import popup.
+  group_name: department.name,
+  department_id: department.id,
+  branch_id: department.branch_id ?? null,
+
+  // Save consent status.
+  opted_in: consentConfirmed,
+  consent_source: consentConfirmed
+    ? consentSource || 'excel_import'
+    : null,
+  consent_updated_at: consentConfirmed
+    ? new Date().toISOString()
+    : null,
+});
     }
 
     if (accepted.length === 0) {
