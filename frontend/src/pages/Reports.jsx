@@ -840,7 +840,7 @@ const departmentSummary = Array.isArray(data?.departmentRows)
     },
     {
       key: "queued",
-      label: "Queued",
+      label: "Waiting",
       render: (r) => n(r.queued),
     },
     {
@@ -862,7 +862,7 @@ const exportRows = filteredDetailRows.map((r) => ({
   Branch: r.branch || "No branch",
   Department: r.department || "Unassigned",
   Sent: Number(r.sent || 0),
-  Queued: Number(r.queued || 0),
+  Waiting: Number(r.queued || 0),
   Failed: Number(r.failed || 0),
   "Send Rate": getSendRate(r),
 }));
@@ -915,7 +915,7 @@ const exportRows = filteredDetailRows.map((r) => ({
   "Branch",
   "Department",
   "Sent",
-  "Queued",
+  "Waiting",
   "Failed",
   "Send Rate",
 ]],
@@ -1131,7 +1131,7 @@ columnStyles: {
                 "bg-gradient-to-br from-sky-400 to-sky-700",
             },
             {
-              label: "Queued Messages",
+              label: "Waiting Messages",
               value: summary.queued,
               icon: <RefreshCw size={22} />,
               styles:

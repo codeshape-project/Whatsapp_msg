@@ -869,7 +869,7 @@ export default function Dashboard() {
       color: COLORS.failed,
     },
     {
-      label: "Queued",
+      label: "Waiting",
       value: stats.queued,
       pct:
         stats.totalMessages > 0
@@ -942,7 +942,7 @@ export default function Dashboard() {
 
         <StatCard
           icon={Clock}
-          label="Queued Messages"
+          label="Wating Messages"
           value={n(stats.queued)}
           color={COLORS.queued}
           footer="Waiting to be sent"

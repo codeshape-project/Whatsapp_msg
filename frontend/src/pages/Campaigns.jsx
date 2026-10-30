@@ -512,7 +512,7 @@ export default function Campaigns() {
                   "Template",
                   "Recipients",
                   "Sent",
-                  "Queued",
+                  "Waiting",
                   "Failed",
                   "Status",
                   "Schedule",
