@@ -104,8 +104,27 @@ const unwrapArray = (response, keys = []) => {
 export const api = {
   baseUrl: BASE_URL,
 
-  /* ---------- DASHBOARD ---------- */
-// ---------- DASHBOARD ----------
+  // ORGANIZATION PROFILE
+
+  getOrganizationProfile: () =>
+    request("/organization/profile"),
+
+  updateOrganizationProfile: (payload) => {
+    const body = new FormData();
+
+    body.append("name", payload.name || "");
+    body.append("location", payload.location || "");
+
+    if (payload.logo) {
+      body.append("logo", payload.logo);
+    }
+
+    return request("/organization/profile", {
+      method: "PATCH",
+      body,
+    });
+  },
+
 
 getDashboardStats: async () =>
   (await request("/dashboard/stats")).data,
@@ -176,6 +195,10 @@ getRecentActivity: async () => {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+    deleteBranch: async (id) =>
+  request(`/master/branches/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }),
 
   /* ---------- DEPARTMENTS ---------- */
 
@@ -201,6 +224,10 @@ getRecentActivity: async () => {
         branch_id: payload.branch_id || null,
       }),
     }),
+    deleteDepartment: async (id) =>
+  request(`/master/departments/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }),
 
   /* ---------- CONTACTS ---------- */
 

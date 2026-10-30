@@ -15,6 +15,7 @@ import webhooks from './routes/webhooks.js';
 import dashboard from './routes/dashboard.js';
 import templates from './routes/templates.js';
 import masterManagement from "./routes/masterManagement.js";
+import organization from "./routes/organization.js";
 const app = express();
 
 const allowedOrigins = (config.frontendUrl || 'http://localhost:5173')
@@ -94,6 +95,7 @@ app.use('/api/templates', requireAuth, templates);
 app.use('/api/reports', requireAuth, reports);
 app.use("/api/master", requireAuth, masterManagement);
 app.use("/api/cron", cronRoutes);
+app.use("/api/organization", requireAuth, organization);
 app.use((req, res) => {
   res.status(404).json({
     error: `Route not found: ${req.method} ${req.path}`

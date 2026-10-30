@@ -785,19 +785,39 @@ export default function DepartmentContacts() {
       "Opted In": contact.opted_in ? "Yes" : "No",
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Contacts");
+    const worksheet = XLSX.utils.aoa_to_sheet([
+  [organization?.name || "Organization"],
+  [organization?.location || ""],
+  [`${departmentName} - CONTACTS EXPORT`],
+  [`Generated: ${new Date().toLocaleString("en-IN")}`],
+  [],
+  Object.keys(exportRows[0] || {
+    Name: "",
+    Phone: "",
+    Email: "",
+    Department: "",
+    Status: "",
+    "Phone Validation": "",
+    "Opted In": "",
+  }),
+  ...exportRows.map((row) => Object.values(row)),
+]);
 
-    const safeName = (departmentName || "Department")
-      .replace(/[\\/:*?"<>|]/g, "-")
-      .trim();
+const workbook = XLSX.utils.book_new();
 
-    XLSX.writeFile(workbook, `${safeName}-contacts.xlsx`);
-    setNotice({
-      type: "success",
-      text: `${filtered.length} contacts exported.`,
-    });
+XLSX.utils.book_append_sheet(
+  workbook,
+  worksheet,
+  "Contacts"
+);
+
+const safeName = (organization?.name || "Organization")
+  .replace(/[\\/:*?"<>|]/g, "_");
+
+XLSX.writeFile(
+  workbook,
+  `${safeName}_${departmentName}_contacts.xlsx`
+);
   }
 
   /* ================= TABLE COLUMNS ================= */

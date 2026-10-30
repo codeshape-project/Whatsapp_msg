@@ -2315,39 +2315,59 @@ export default function Contacts() {
 
   /* ================= EXPORT CONTACTS ================= */
 
-  const exportContacts = () => {
-    const exportRows = filtered.map((contact) =>
-      isHospital
-        ? {
-            name: contact.name,
-            phone: contact.phone,
-            group: contact.group,
-            opted_in: contact.opted_in,
-            status: contact.status,
-          }
-        : {
-            name: contact.name,
-            phone: contact.phone,
-            email: contact.email || "",
-            group: contact.group,
-            opted_in: contact.opted_in,
-            status: contact.status,
-          }
-    );
+ const exportContacts = () => {
+  const exportRows = filtered.map((contact) =>
+    isHospital
+      ? {
+          name: contact.name,
+          phone: contact.phone,
+          group: contact.group,
+          opted_in: contact.opted_in,
+          status: contact.status,
+        }
+      : {
+          name: contact.name,
+          phone: contact.phone,
+          email: contact.email || "",
+          group: contact.group,
+          opted_in: contact.opted_in,
+          status: contact.status,
+        }
+  );
 
-    const workbook = XLSX.utils.book_new();
+  const workbook = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.json_to_sheet(exportRows),
-      "Contacts"
-    );
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    [organization?.name || "Organization"],
+    [organization?.location || ""],
+    ["CONTACTS EXPORT"],
+    [`Generated: ${new Date().toLocaleString("en-IN")}`],
+    [],
+    Object.keys(exportRows[0] || {
+      name: "",
+      phone: "",
+      email: "",
+      group: "",
+      opted_in: "",
+      status: "",
+    }),
+    ...exportRows.map((row) => Object.values(row)),
+  ]);
 
-    XLSX.writeFile(
-      workbook,
-      `${(organization?.name || "Organization").replace(/\W+/g, "_")}_contacts.xlsx`
-    );
-  };
+  XLSX.utils.book_append_sheet(
+    workbook,
+    worksheet,
+    "Contacts"
+  );
+
+  const safeName = (organization?.name || "Organization")
+    .replace(/[\\/:*?"<>|]/g, "_");
+
+  XLSX.writeFile(
+    workbook,
+    `${safeName}_contacts.xlsx`
+  );
+};
 
     /* ================= CONFIRM ALL CONSENT ================= */
 

@@ -10,6 +10,7 @@ import {
   GitBranch,
   Sparkles,
   CheckCircle2,
+   Trash2,
   AlertCircle,
 } from "lucide-react";
 import api from "../services/api";
@@ -144,7 +145,7 @@ export default function MasterManagement() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-
+const [deletingId, setDeletingId] = useState("");
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -248,6 +249,34 @@ export default function MasterManagement() {
       setSaving(false);
     }
   };
+  const handleDelete = async (item) => {
+  const itemType = type === "branch" ? "branch" : "department";
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete "${item.name}"?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setDeletingId(item.id);
+    setError("");
+    setNotice("");
+
+    if (type === "branch") {
+      await api.deleteBranch(item.id);
+    } else {
+      await api.deleteDepartment(item.id);
+    }
+
+    setNotice(`${itemType} deleted successfully.`);
+    await loadData();
+  } catch (err) {
+    setError(err.message || `Unable to delete ${itemType}.`);
+  } finally {
+    setDeletingId("");
+  }
+};
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -477,13 +506,30 @@ export default function MasterManagement() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
+               <colgroup>
+    {type === "department" ? (
+      <>
+        <col style={{ width: "34%" }} />
+        <col style={{ width: "26%" }} />
+        <col style={{ width: "25%" }} />
+        <col style={{ width: "15%" }} />
+      </>
+    ) : (
+      <>
+        <col style={{ width: "45%" }} />
+        <col style={{ width: "35%" }} />
+        <col style={{ width: "20%" }} />
+      </>
+    )}
+  </colgroup>
               <thead>
                 <tr className="bg-brand-50 text-xs font-semibold text-brand-900">
-                  <th className="px-4 py-3.5">Name</th>
+                  <th className="px-8 py-5">Name</th>
                   {type === "department" && (
-                    <th className="px-4 py-3.5">Branch</th>
+                    <th className="px-8 py-5">Branch</th>
                   )}
-                  <th className="px-4 py-3.5">Status</th>
+                  <th className="px-8 py-5">Status</th>
+                  <th className="px-8 py-5 text-right">Actions</th>
                 </tr>
               </thead>
 
@@ -499,7 +545,7 @@ export default function MasterManagement() {
                       key={item.id}
                       className="transition hover:bg-brand-50/60"
                     >
-                      <td className="px-4 py-3.5">
+                      <td className="px-8 py-4">
                         <div className="flex items-center gap-3">
                           <span
                             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
@@ -521,7 +567,7 @@ export default function MasterManagement() {
                       </td>
 
                       {type === "department" && (
-                        <td className="px-4 py-3.5 text-slate-700">
+                        <td className="px-8 py-4 text-slate-700">
                           {branch?.name || (
                             <span className="text-slate-500">
                               Standalone
@@ -530,9 +576,25 @@ export default function MasterManagement() {
                         </td>
                       )}
 
-                      <td className="px-4 py-3.5">
+                      <td className="px-8 py-4">
                         <StatusBadge active={item.is_active !== false} />
                       </td>
+                        <td className="px-8 py-4 text-right">
+          <button
+            type="button"
+            onClick={() => handleDelete(item)}
+            disabled={deletingId === item.id}
+            title={`Delete ${item.name}`}
+            className="inline-flex items-center justify-center rounded-lg p-2 text-red-500 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deletingId === item.id ? (
+              <RefreshCw size={17} className="animate-spin" />
+            ) : (
+              <Trash2 size={17} />
+            )}
+          </button>
+        </td>
+                      
                     </tr>
                   );
                 })}

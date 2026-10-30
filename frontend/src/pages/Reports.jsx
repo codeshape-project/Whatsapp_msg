@@ -857,109 +857,177 @@ const departmentSummary = Array.isArray(data?.departmentRows)
 
   // Existing Excel export.
   // Excel export with department and branch details.
-const exportRows = filteredDetailRows.map((r) => ({
-  Date: r.date,
-  Branch: r.branch || "No branch",
-  Department: r.department || "Unassigned",
-  Sent: Number(r.sent || 0),
-  Waiting: Number(r.queued || 0),
-  Failed: Number(r.failed || 0),
-  "Send Rate": getSendRate(r),
-}));
 
+  // Prepare export data with Branch, Department and Waiting.
+  const exportRows = filteredDetailRows.map((r) => ({
+    Date: r.date,
+    Branch: r.branch || "No branch",
+    Department:
+      r.department ||
+      r.department_name ||
+      r.departmentName ||
+      "Unassigned",
+    Sent: Number(r.sent ?? 0),
+    Waiting: Number(r.queued ?? 0),
+    Failed: Number(r.failed ?? 0),
+    "Send Rate": getSendRate(r),
+  }));
+
+  // Excel export
   const exportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(
-      wb,
-      ws,
-      "Messaging Report"
-    );
+    const ws = XLSX.utils.aoa_to_sheet([
+      [organization?.name || "Organization"],
+      [organization?.location || ""],
+      [`${period.toUpperCase()} MESSAGING REPORT`],
+      [`Generated: ${new Date().toLocaleString("en-IN")}`],
+      [],
+      ["Date", "Branch", "Department", "Sent", "Waiting", "Failed", "Send Rate"],
+      ...exportRows.map((r) => [
+        r.Date,
+        r.Branch,
+        r.Department,
+        r.Sent,
+        r.Waiting,
+        r.Failed,
+        r["Send Rate"],
+      ]),
+    ]);
 
-    XLSX.writeFile(
-      wb,
-      `${(organization?.name || "Organization").replace(
-        /\W+/g,
-        "_"
-      )}_${period}_report.xlsx`
-    );
+    ws["!cols"] = [
+      { wch: 16 },
+      { wch: 22 },
+      { wch: 24 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 15 },
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "Messaging Report");
+
+    const safeName = (organization?.name || "Organization")
+      .replace(/[\\/:*?"<>|]/g, "_");
+
+    XLSX.writeFile(wb, `${safeName}_${period}_report.xlsx`);
   };
 
-  // Existing PDF export.
-  const exportPdf = () => {
-    const doc = new jsPDF();
+  // Load organization logo for PDF.
+  const getLogoData = async () => {
+    if (!organization?.logo_url) return null;
 
-    doc.setFontSize(16);
+    try {
+      const response = await fetch(organization.logo_url);
+      if (!response.ok) return null;
 
-    doc.text(
-      `${organization?.name || "Organization"} - ${
-        period[0].toUpperCase() + period.slice(1)
-      } Report`,
-      14,
-      18
-    );
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
 
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+
+      return canvas.toDataURL("image/png");
+    } catch (error) {
+      console.error("PDF logo loading failed:", error);
+      return null;
+    }
+  };
+
+  // PDF export
+  const exportPdf = async () => {
+    const doc = new jsPDF("landscape");
+
+    const logoData = await getLogoData();
+
+    let titleX = 14;
+
+    if (logoData) {
+      doc.addImage(logoData, "PNG", 14, 10, 20, 20);
+      titleX = 40;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(17);
+    doc.text(organization?.name || "Organization", titleX, 17);
+
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
 
+    if (organization?.location) {
+      doc.text(organization.location, titleX, 24, {
+        maxWidth: 200,
+      });
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(`${period.toUpperCase()} MESSAGING REPORT`, 14, 39);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
     doc.text(
       `Generated: ${new Date().toLocaleString("en-IN")}`,
       14,
-      25
+      46
     );
+    doc.text(`Total Messages: ${summary.total}`, 14, 53);
 
     autoTable(doc, {
-      startY: 31,
-     head: [[
-  "Date",
-  "Branch",
-  "Department",
-  "Sent",
-  "Waiting",
-  "Failed",
-  "Send Rate",
-]],
-
-body: exportRows.map((r) => [
-  r.Date,
-  r.Branch,
-  r.Department,
-  r.Sent,
-  r.Queued,
-  r.Failed,
-  r["Send Rate"],
-]),
-
-styles: {
-  fontSize: 8,
-  cellPadding: 2.5,
-},
-
-headStyles: {
-  fontSize: 8,
-},
-
-columnStyles: {
-  0: { cellWidth: 22 },
-  1: { cellWidth: 30 },
-  2: { cellWidth: 35 },
-},
+      startY: 60,
+      head: [[
+        "Date",
+        "Branch",
+        "Department",
+        "Sent",
+        "Waiting",
+        "Failed",
+        "Send Rate",
+      ]],
+      body: exportRows.map((r) => [
+        r.Date,
+        r.Branch,
+        r.Department,
+        r.Sent,
+        r.Waiting,
+        r.Failed,
+        r["Send Rate"],
+      ]),
+      theme: "grid",
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      headStyles: {
+        fillColor: [20, 83, 65],
+        textColor: 255,
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 42 },
+        2: { cellWidth: 48 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 25 },
+        6: { cellWidth: 30 },
+      },
     });
 
-    doc.save(
-      `${(organization?.name || "Organization").replace(
-        /\W+/g,
-        "_"
-      )}_${period}_report.pdf`
-    );
+    const safeName = (organization?.name || "Organization")
+      .replace(/[\\/:*?"<>|]/g, "_");
+
+    doc.save(`${safeName}_${period}_report.pdf`);
   };
-
-  // Existing chart maximum.
-  const max = Math.max(
-    1,
-    ...rows.map((r) => Number(r.sent || 0))
-  );
-
+const max = Math.max(
+  1,
+  ...rows.map((r) => Number(r.sent || 0))
+);
   if (loading) {
     return (
       <div className="py-16 text-center text-sm text-slate-500">

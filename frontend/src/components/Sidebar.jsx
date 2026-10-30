@@ -181,14 +181,14 @@ const openDepartment = (department, branchId = null) => {
           </button>
 
           <img
-            src={LOGO_SRC}
-            alt={`${organization?.name || "Organization"} logo`}
-            className="h-16 w-16 rounded-full object-cover ring-2 ring-wa shadow-[0_0_22px_rgba(37,211,102,0.55)]"
-          />
+  src={organization?.logo_url || "/logo.png"}
+  alt={`${organization?.name || "Organization"} logo`}
+  className="h-16 w-16 rounded-full object-cover ring-2 ring-wa"
+/>
 
-          <h1 className="mt-3 text-[15px] font-semibold leading-tight">
-            {organization?.name || "Business Panel"}
-          </h1>
+<h1 className="mt-3 text-[15px] font-semibold leading-tight">
+  {organization?.name || "CodeShape "}
+</h1>
 
           <div className="mt-3 h-px w-full bg-gradient-to-r from-transparent via-wa/50 to-transparent" />
         </div>
