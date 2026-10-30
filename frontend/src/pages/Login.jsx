@@ -149,11 +149,7 @@ export default function Login() {
           {/* Login form */}
           <section className="flex flex-1 flex-col justify-center px-7 py-8 lg:pl-5 lg:pr-9">
             <div className="flex items-center gap-3">
-              <img
-                src={LOGO_SRC}
-                alt="Organization logo"
-                className="h-12 w-12 shrink-0 object-contain"
-              />
+             
 
               <div>
                 <h1 className="text-lg font-bold leading-tight text-[#0b5a3c]">
