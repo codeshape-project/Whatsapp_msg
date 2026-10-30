@@ -555,7 +555,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../db.js';
 import { config } from '../config.js';
 import { normalizePhone } from '../utils/phone.js';
-
+import { parseContactSheet } from '../utils/contactSheet.js';
 const router = Router();
 
 const upload = multer({
@@ -829,6 +829,211 @@ router.patch('/:id/consent', async (req, res, next) => {
 
 /* ================= IMPORT EXCEL OR CSV ================= */
 
+// router.post('/import', upload.single('file'), async (req, res, next) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({
+//         error: 'Choose an Excel or CSV file first.',
+//       });
+//     }
+
+//     // The department chosen in the import popup is required.
+//     const departmentId = String(req.body?.department_id || '').trim();
+
+//     if (!departmentId) {
+//       return res.status(400).json({
+//         error: 'Select a department before importing.',
+//       });
+//     }
+
+//     const department = await findDepartment(req.organizationId, departmentId);
+
+//     if (!department) {
+//       return res.status(400).json({
+//         error: 'Selected department was not found.',
+//       });
+//     }
+
+//     const extension = req.file.originalname
+//       .toLowerCase()
+//       .split('.')
+//       .pop();
+
+//     if (!['xlsx', 'xls', 'csv'].includes(extension)) {
+//       return res.status(415).json({
+//         error: 'Only .xlsx, .xls and .csv files are supported.',
+//       });
+//     }
+
+//     const workbook = XLSX.read(req.file.buffer, {
+//       type: 'buffer',
+//     });
+
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+//     if (!sheet) {
+//       return res.status(400).json({
+//         error: 'The spreadsheet has no readable worksheet.',
+//       });
+//     }
+
+//     const rows = XLSX.utils.sheet_to_json(sheet, {
+//       defval: '',
+//     });
+
+//     if (rows.length === 0) {
+//       return res.status(400).json({
+//         error: 'The spreadsheet contains no contact rows.',
+//       });
+//     }
+
+//     if (rows.length > config.maxImportRows) {
+//       return res.status(413).json({
+//         error: `Maximum ${config.maxImportRows} rows per import.`,
+//       });
+//     }
+
+//     const accepted = [];
+//     const invalid = [];
+//     const seen = new Set();
+
+//     for (let index = 0; index < rows.length; index++) {
+//       const lower = normalizeHeaders(rows[index]);
+
+//       // Supports the existing Excel headers:
+//       // Name, WhatsApp Number, Group, S.No
+//       const name = String(
+//         firstValue(lower, [
+//           'name',
+//           'full_name',
+//           'full name',
+//           'contact',
+//           'contact name',
+//         ])
+//       ).trim();
+
+//       const rawPhone = firstValue(lower, [
+//         'phone',
+//         'phone number',
+//         'mobile',
+//         'mobile number',
+//         'whatsapp',
+//         'whatsapp number',
+//         'whatsapp_number',
+//         'whatsapp no',
+//         'whatsapp no.',
+//         'contact number',
+//         'number',
+//       ]);
+
+//       const phone = normalizePhone(rawPhone);
+
+//       if (!name || !phone) {
+//         invalid.push({
+//           row: index + 2,
+//           reason: !name
+//             ? 'Name is missing'
+//             : 'Phone number is missing or invalid',
+//         });
+//         continue;
+//       }
+
+//       if (seen.has(phone)) {
+//         invalid.push({
+//           row: index + 2,
+//           reason: 'Duplicate phone number in this file',
+//         });
+//         continue;
+//       }
+
+//       seen.add(phone);
+
+//       // A phone number alone is not evidence of WhatsApp consent.
+//       // Opt-in requires an explicit value and a consent source.
+//      // Read consent information from the Excel row.
+// const optedIn = normalizeConsent(
+//   firstValue(lower, [
+//     'opted_in',
+//     'opted in',
+//     'whatsapp_consent',
+//     'whatsapp consent',
+//   ])
+// );
+
+// const consentSource = String(
+//   firstValue(lower, [
+//     'consent_source',
+//     'consent source',
+//   ])
+// ).trim();
+
+// // Consent is confirmed only when the Excel row explicitly
+// // indicates opt-in.
+// const consentConfirmed = optedIn;
+
+//       const email = String(
+//         firstValue(lower, ['email', 'email address'])
+//       ).trim();
+
+//       accepted.push({
+//   organization_id: req.organizationId,
+//   name,
+//   phone,
+//   email: email || null,
+
+//   // Use the department selected in the import popup.
+//   group_name: department.name,
+//   department_id: department.id,
+//   branch_id: department.branch_id ?? null,
+
+//   // Save consent status.
+//   opted_in: consentConfirmed,
+//   consent_source: consentConfirmed
+//     ? consentSource || 'excel_import'
+//     : null,
+//   consent_updated_at: consentConfirmed
+//     ? new Date().toISOString()
+//     : null,
+// });
+//     }
+
+//     if (accepted.length === 0) {
+//       return res.status(400).json({
+//         error: 'No valid contacts were found.',
+//         received: rows.length,
+//         invalidCount: invalid.length,
+//         invalid: invalid.slice(0, 100),
+//         supportedColumns: [
+//           'Name',
+//           'WhatsApp Number',
+//           'Email',
+//           'opted_in',
+//           'consent_source',
+//         ],
+//       });
+//     }
+
+//     const { data, error } = await supabase
+//       .from('contacts')
+//       .upsert(accepted, {
+//         onConflict: 'organization_id,phone',
+//       })
+//       .select('id');
+
+//     throwIfError(error);
+
+//     res.json({
+//       success: true,
+//       received: rows.length,
+//       imported: data?.length || 0,
+//       department: department.name,
+//       invalidCount: invalid.length,
+//       invalid: invalid.slice(0, 100),
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// });
 router.post('/import', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {
@@ -877,15 +1082,20 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
       });
     }
 
-    const rows = XLSX.utils.sheet_to_json(sheet, {
+    // Read as plain rows. The parser decides whether row 1 is a heading
+    // and finds the phone / name / email columns.
+    const matrix = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
       defval: '',
     });
 
-    if (rows.length === 0) {
-      return res.status(400).json({
-        error: 'The spreadsheet contains no contact rows.',
-      });
+    const parsed = parseContactSheet(matrix);
+
+    if (parsed.error) {
+      return res.status(400).json({ error: parsed.error });
     }
+
+    const rows = parsed.contacts;
 
     if (rows.length > config.maxImportRows) {
       return res.status(413).json({
@@ -897,50 +1107,20 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
     const invalid = [];
     const seen = new Set();
 
-    for (let index = 0; index < rows.length; index++) {
-      const lower = normalizeHeaders(rows[index]);
+    for (const row of rows) {
+      const phone = normalizePhone(row.rawPhone);
 
-      // Supports the existing Excel headers:
-      // Name, WhatsApp Number, Group, S.No
-      const name = String(
-        firstValue(lower, [
-          'name',
-          'full_name',
-          'full name',
-          'contact',
-          'contact name',
-        ])
-      ).trim();
-
-      const rawPhone = firstValue(lower, [
-        'phone',
-        'phone number',
-        'mobile',
-        'mobile number',
-        'whatsapp',
-        'whatsapp number',
-        'whatsapp_number',
-        'whatsapp no',
-        'whatsapp no.',
-        'contact number',
-        'number',
-      ]);
-
-      const phone = normalizePhone(rawPhone);
-
-      if (!name || !phone) {
+      if (!phone) {
         invalid.push({
-          row: index + 2,
-          reason: !name
-            ? 'Name is missing'
-            : 'Phone number is missing or invalid',
+          row: row.rowNumber,
+          reason: 'Phone number is missing or invalid',
         });
         continue;
       }
 
       if (seen.has(phone)) {
         invalid.push({
-          row: index + 2,
+          row: row.rowNumber,
           reason: 'Duplicate phone number in this file',
         });
         continue;
@@ -948,53 +1128,31 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
 
       seen.add(phone);
 
-      // A phone number alone is not evidence of WhatsApp consent.
-      // Opt-in requires an explicit value and a consent source.
-     // Read consent information from the Excel row.
-const optedIn = normalizeConsent(
-  firstValue(lower, [
-    'opted_in',
-    'opted in',
-    'whatsapp_consent',
-    'whatsapp consent',
-  ])
-);
+      // If the file has no name, use the phone number as the name.
+      const name = row.name || phone;
 
-const consentSource = String(
-  firstValue(lower, [
-    'consent_source',
-    'consent source',
-  ])
-).trim();
-
-// Consent is confirmed only when the Excel row explicitly
-// indicates opt-in.
-const consentConfirmed = optedIn;
-
-      const email = String(
-        firstValue(lower, ['email', 'email address'])
-      ).trim();
+      // Consent is confirmed only when the file explicitly says so.
+      const consentConfirmed = normalizeConsent(row.optedInValue);
 
       accepted.push({
-  organization_id: req.organizationId,
-  name,
-  phone,
-  email: email || null,
+        organization_id: req.organizationId,
+        name,
+        phone,
+        email: row.email || null,
 
-  // Use the department selected in the import popup.
-  group_name: department.name,
-  department_id: department.id,
-  branch_id: department.branch_id ?? null,
+        // Use the department selected in the import popup.
+        group_name: department.name,
+        department_id: department.id,
+        branch_id: department.branch_id ?? null,
 
-  // Save consent status.
-  opted_in: consentConfirmed,
-  consent_source: consentConfirmed
-    ? consentSource || 'excel_import'
-    : null,
-  consent_updated_at: consentConfirmed
-    ? new Date().toISOString()
-    : null,
-});
+        opted_in: consentConfirmed,
+        consent_source: consentConfirmed
+          ? row.consentSource || 'excel_import'
+          : null,
+        consent_updated_at: consentConfirmed
+          ? new Date().toISOString()
+          : null,
+      });
     }
 
     if (accepted.length === 0) {
@@ -1003,13 +1161,6 @@ const consentConfirmed = optedIn;
         received: rows.length,
         invalidCount: invalid.length,
         invalid: invalid.slice(0, 100),
-        supportedColumns: [
-          'Name',
-          'WhatsApp Number',
-          'Email',
-          'opted_in',
-          'consent_source',
-        ],
       });
     }
 
@@ -1034,7 +1185,6 @@ const consentConfirmed = optedIn;
     next(error);
   }
 });
-
 /* ================= VALIDATE PHONE FORMAT ================= */
 
 // Checks the phone-number format for all contacts in the organization.
