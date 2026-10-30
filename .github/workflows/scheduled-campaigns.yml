@@ -1,0 +1,16 @@
+name: Run scheduled campaigns
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call backend cron endpoint
+        run: |
+          curl --fail --silent --show-error --max-time 70 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.BACKEND_URL }}/api/cron/scheduled-campaigns"

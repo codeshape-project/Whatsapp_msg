@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import { supabase } from "../db.js";
 import { processCampaign } from "./campaigns.js";
@@ -6,24 +5,25 @@ import { processCampaign } from "./campaigns.js";
 const router = Router();
 
 const MAX_CAMPAIGNS_PER_RUN = 5;
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50;
+const STALE_SENDING_MINUTES = 15;
 
 function isAuthorized(req) {
   const secret = process.env.CRON_SECRET;
   const authorization = req.headers.authorization;
 
-  if (!secret || !authorization) {
+  if (!secret) {
+    console.error("[CRON] CRON_SECRET env variable is not set.");
+    return false;
+  }
+
+  if (!authorization) {
     return false;
   }
 
   return authorization === `Bearer ${secret}`;
 }
 
-/**
- * Fetch campaigns that are due to run.
- * Include running campaigns so campaigns with remaining queued
- * messages can continue in later cron executions.
- */
 async function getEligibleCampaigns(now) {
   const [scheduledResult, runningResult] = await Promise.all([
     supabase
@@ -43,23 +43,15 @@ async function getEligibleCampaigns(now) {
       .limit(MAX_CAMPAIGNS_PER_RUN),
   ]);
 
-  if (scheduledResult.error) {
-    throw scheduledResult.error;
-  }
+  if (scheduledResult.error) throw scheduledResult.error;
+  if (runningResult.error) throw runningResult.error;
 
-  if (runningResult.error) {
-    throw runningResult.error;
-  }
-
-  // Scheduled campaigns first, followed by running campaigns.
   const combined = [
     ...(scheduledResult.data || []),
     ...(runningResult.data || []),
   ];
 
-  // Avoid duplicates if results ever overlap.
   const unique = new Map();
-
   for (const campaign of combined) {
     unique.set(campaign.id, campaign);
   }
@@ -67,18 +59,10 @@ async function getEligibleCampaigns(now) {
   return [...unique.values()].slice(0, MAX_CAMPAIGNS_PER_RUN);
 }
 
-/**
- * Atomically claim a scheduled campaign.
- *
- * Only one invocation can change its status from scheduled to running.
- */
 async function claimScheduledCampaign(campaign, now) {
   const { data, error } = await supabase
     .from("campaigns")
-    .update({
-      status: "running",
-      updated_at: now,
-    })
+    .update({ status: "running", updated_at: now })
     .eq("id", campaign.id)
     .eq("organization_id", campaign.organization_id)
     .eq("status", "scheduled")
@@ -86,33 +70,44 @@ async function claimScheduledCampaign(campaign, now) {
     .select("id, organization_id, status")
     .maybeSingle();
 
-  if (error) {
-    throw error;
-  }
-
+  if (error) throw error;
   return data;
 }
 
-/**
- * Check whether a running campaign still has queued messages.
- */
 async function hasQueuedMessages(campaign) {
   const { count, error } = await supabase
     .from("messages")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", campaign.organization_id)
     .eq("campaign_id", campaign.id)
-    .eq("status", "queued");
+    .in("status", ["queued", "sending"]);
 
-  if (error) {
-    throw error;
-  }
-
+  if (error) throw error;
   return (count || 0) > 0;
 }
 
-router.get("/scheduled-campaigns", async (req, res) => {
-  // Keep the cron endpoint protected.
+async function failStaleSendingMessages() {
+  const cutoff = new Date(
+    Date.now() - STALE_SENDING_MINUTES * 60_000
+  ).toISOString();
+
+  const { error } = await supabase
+    .from("messages")
+    .update({
+      status: "failed",
+      last_error:
+        "Run interrupted before confirmation; not retried to avoid duplicate send.",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("status", "sending")
+    .lt("updated_at", cutoff);
+
+  if (error) {
+    console.error("[CRON] Stale message cleanup failed:", error);
+  }
+}
+
+async function handleScheduledCampaigns(req, res) {
   if (!isAuthorized(req)) {
     return res.status(401).json({
       success: false,
@@ -123,6 +118,8 @@ router.get("/scheduled-campaigns", async (req, res) => {
   const now = new Date().toISOString();
 
   try {
+    await failStaleSendingMessages();
+
     const campaigns = await getEligibleCampaigns(now);
     const results = [];
 
@@ -131,11 +128,7 @@ router.get("/scheduled-campaigns", async (req, res) => {
         let shouldProcess = false;
 
         if (campaign.status === "scheduled") {
-          // Claim scheduled campaigns before processing.
-          const claimedCampaign = await claimScheduledCampaign(
-            campaign,
-            now
-          );
+          const claimedCampaign = await claimScheduledCampaign(campaign, now);
 
           if (!claimedCampaign) {
             results.push({
@@ -143,14 +136,11 @@ router.get("/scheduled-campaigns", async (req, res) => {
               status: "skipped",
               reason: "Campaign was already claimed or is no longer due.",
             });
-
             continue;
           }
 
           shouldProcess = true;
         } else if (campaign.status === "running") {
-          // Continue only if queued messages remain.
-          // Note: this check alone is NOT a concurrency lock.
           shouldProcess = await hasQueuedMessages(campaign);
         }
 
@@ -160,7 +150,6 @@ router.get("/scheduled-campaigns", async (req, res) => {
             status: "skipped",
             reason: "No queued messages remain.",
           });
-
           continue;
         }
 
@@ -177,10 +166,7 @@ router.get("/scheduled-campaigns", async (req, res) => {
           processed: result?.processed ?? null,
         });
       } catch (error) {
-        console.error(
-          `[CRON] Campaign ${campaign.id} failed:`,
-          error
-        );
+        console.error(`[CRON] Campaign ${campaign.id} failed:`, error);
 
         results.push({
           campaignId: campaign.id,
@@ -205,6 +191,9 @@ router.get("/scheduled-campaigns", async (req, res) => {
       error: error.message,
     });
   }
-});
+}
+
+router.get("/scheduled-campaigns", handleScheduledCampaigns);
+router.post("/scheduled-campaigns", handleScheduledCampaigns);
 
 export default router;
