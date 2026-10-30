@@ -1729,6 +1729,7 @@ export default function Contacts() {
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
   const [validating, setValidating] = useState(false);
+    const [optingIn, setOptingIn] = useState(false);
   const [branches, setBranches] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
@@ -2348,6 +2349,45 @@ export default function Contacts() {
     );
   };
 
+    /* ================= CONFIRM ALL CONSENT ================= */
+
+  const optInAllContacts = async () => {
+    if (!api.isBackendEnabled) {
+      setNotice({
+        type: "error",
+        text: "Connect the backend to update contacts.",
+      });
+      return;
+    }
+
+    setOptingIn(true);
+    setNotice(null);
+
+    try {
+      const result = await api.post("/contacts/opt-in-all", {
+        confirm: true,
+        source: "bulk_opt_in_by_admin",
+      });
+
+      const freshResponse = await api.getContacts();
+      setContacts(getContactArray(freshResponse).map(normalizeContact));
+
+      const updated = result?.updated ?? result?.data?.updated ?? 0;
+
+      setNotice({
+        type: "success",
+        text: `${updated} contact(s) marked as Confirmed.`,
+      });
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error.message || "Could not update contacts.",
+      });
+    } finally {
+      setOptingIn(false);
+    }
+  };
+
   /* ================= TABLE COLUMNS ================= */
 
   const columns = [
@@ -2524,6 +2564,14 @@ export default function Contacts() {
         >
           <CheckCircle size={16} />
           {validating ? "Checking Numbers..." : "Validate All Numbers"}
+        </button>
+                <button
+          onClick={optInAllContacts}
+          disabled={optingIn || validating || busy}
+          className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <CheckCircle size={16} />
+          {optingIn ? "Updating..." : "Confirm All Consent"}
         </button>
 
         <button onClick={openAdd} className="btn-primary">

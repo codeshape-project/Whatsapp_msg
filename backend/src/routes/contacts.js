@@ -1091,6 +1091,45 @@ router.post('/validate-all', async (req, res, next) => {
   }
 });
 
+/* ================= OPT IN ALL CONTACTS ================= */
+
+// Marks every contact in the organization that is not opted in as opted in.
+// Use only when you hold real consent for these contacts.
+router.post('/opt-in-all', async (req, res, next) => {
+  try {
+    const { confirm, source } = req.body || {};
+
+    if (confirm !== true) {
+      return res.status(400).json({
+        error: 'Please confirm that you have consent from these contacts.',
+      });
+    }
+
+    const consentSource =
+      String(source || '').trim() || 'bulk_opt_in_by_admin';
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({
+        opted_in: true,
+        consent_source: consentSource,
+        consent_updated_at: new Date().toISOString(),
+      })
+      .eq('organization_id', req.organizationId)
+      .eq('opted_in', false)
+      .select('id');
+
+    throwIfError(error);
+
+    res.json({
+      success: true,
+      updated: (data || []).length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /* ================= GET CONTACT WHATSAPP HISTORY ================= */
 
 router.get('/:contactId/messages', async (req, res, next) => {
