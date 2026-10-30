@@ -2571,7 +2571,7 @@ export default function Contacts() {
           className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
         >
           <CheckCircle size={16} />
-          {optingIn ? "Updating..." : "Confirm All Consent"}
+          {optingIn ? "Updating confirm..." : "Confirm All Consent"}
         </button>
 
         <button onClick={openAdd} className="btn-primary">
