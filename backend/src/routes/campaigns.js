@@ -3073,6 +3073,107 @@ router.get("/", async (req, res, next) => {
 
 /* ================= CREATE CAMPAIGN ================= */
 
+// router.post("/", async (req, res, next) => {
+//   try {
+//     const {
+//       name,
+//       template_name,
+//       language = "en_US",
+//       group_name = null,
+//       scheduled_at = null,
+//       contact_ids = [],
+//     } = req.body || {};
+
+//     if (!name?.trim() || !template_name?.trim()) {
+//       return res.status(400).json({
+//         error: "Campaign name and approved Meta template name are required.",
+//       });
+//     }
+
+//     if (
+//       !Array.isArray(contact_ids) ||
+//       contact_ids.length > MAX_CONTACT_IDS
+//     ) {
+//       return res.status(400).json({
+//         error: `contact_ids must be an array of up to ${MAX_CONTACT_IDS} contacts.`,
+//       });
+//     }
+
+//     if (new Set(contact_ids).size !== contact_ids.length) {
+//       return res.status(400).json({
+//         error: "Duplicate contact IDs are not allowed.",
+//       });
+//     }
+
+//     if (scheduled_at && Number.isNaN(new Date(scheduled_at).getTime())) {
+//       return res.status(400).json({
+//         error: "scheduled_at must be a valid date.",
+//       });
+//     }
+
+//     if (scheduled_at && new Date(scheduled_at).getTime() <= Date.now()) {
+//       return res.status(400).json({
+//         error: "scheduled_at must be a future date and time.",
+//       });
+//     }
+
+//     let eligibleContacts = [];
+
+//     if (contact_ids.length > 0) {
+//       const { data: contacts, error: contactsError } = await supabase
+//         .from("contacts")
+//         .select("id")
+//         .eq("organization_id", req.organizationId)
+//         .eq("opted_in", true)
+//         .in("id", contact_ids);
+
+//       throwIfError(contactsError);
+//       eligibleContacts = contacts || [];
+//     }
+
+//     const row = {
+//       organization_id: req.organizationId,
+//       name: name.trim(),
+//       template_name: template_name.trim(),
+//       language,
+//       group_name,
+//       scheduled_at,
+//       status: scheduled_at ? "scheduled" : "draft",
+//       recipient_count: eligibleContacts.length,
+//       created_by: req.user.id,
+//     };
+
+//     const { data: campaign, error: campaignError } = await supabase
+//       .from("campaigns")
+//       .insert(row)
+//       .select()
+//       .single();
+
+//     throwIfError(campaignError);
+
+//     if (eligibleContacts.length > 0) {
+//       const messageRows = eligibleContacts.map((contact) => ({
+//         organization_id: req.organizationId,
+//         campaign_id: campaign.id,
+//         contact_id: contact.id,
+//         status: "queued",
+//       }));
+
+//       const { error: messagesError } = await supabase
+//         .from("messages")
+//         .insert(messageRows);
+
+//       throwIfError(messagesError);
+//     }
+
+//     res.status(201).json({ data: campaign });
+//   } catch (error) {
+//     next(error);
+//   }
+// });
+
+/* ================= CREATE CAMPAIGN ================= */
+
 router.post("/", async (req, res, next) => {
   try {
     const {
@@ -3080,13 +3181,23 @@ router.post("/", async (req, res, next) => {
       template_name,
       language = "en_US",
       group_name = null,
+      branch_id = null,
+      department_id,
       scheduled_at = null,
       contact_ids = [],
     } = req.body || {};
 
+    // Basic validation
     if (!name?.trim() || !template_name?.trim()) {
       return res.status(400).json({
         error: "Campaign name and approved Meta template name are required.",
+      });
+    }
+
+    // Department is mandatory
+    if (!department_id) {
+      return res.status(400).json({
+        error: "Please select a department.",
       });
     }
 
@@ -3105,52 +3216,117 @@ router.post("/", async (req, res, next) => {
       });
     }
 
-    if (scheduled_at && Number.isNaN(new Date(scheduled_at).getTime())) {
+    // Validate department belongs to this organization
+    const { data: department, error: departmentError } =
+      await supabase
+        .from("departments")
+        .select("id, name, branch_id, is_active")
+        .eq("id", department_id)
+        .eq("organization_id", req.organizationId)
+        .maybeSingle();
+
+    throwIfError(departmentError);
+
+    if (!department || department.is_active === false) {
+      return res.status(400).json({
+        error: "Selected department does not exist or is inactive.",
+      });
+    }
+
+    // Branch is optional.
+    // If supplied, verify that the department belongs to it.
+    if (branch_id) {
+      const { data: branch, error: branchError } =
+        await supabase
+          .from("branches")
+          .select("id, is_active")
+          .eq("id", branch_id)
+          .eq("organization_id", req.organizationId)
+          .maybeSingle();
+
+      throwIfError(branchError);
+
+      if (!branch || branch.is_active === false) {
+        return res.status(400).json({
+          error: "Selected branch does not exist or is inactive.",
+        });
+      }
+
+      if (String(department.branch_id || "") !== String(branch_id)) {
+        return res.status(400).json({
+          error: "Selected department does not belong to this branch.",
+        });
+      }
+    }
+
+    if (
+      scheduled_at &&
+      Number.isNaN(new Date(scheduled_at).getTime())
+    ) {
       return res.status(400).json({
         error: "scheduled_at must be a valid date.",
       });
     }
 
-    if (scheduled_at && new Date(scheduled_at).getTime() <= Date.now()) {
+    if (
+      scheduled_at &&
+      new Date(scheduled_at).getTime() <= Date.now()
+    ) {
       return res.status(400).json({
         error: "scheduled_at must be a future date and time.",
       });
     }
 
+    // Get opted-in contacts belonging to this organization
     let eligibleContacts = [];
 
     if (contact_ids.length > 0) {
-      const { data: contacts, error: contactsError } = await supabase
-        .from("contacts")
-        .select("id")
-        .eq("organization_id", req.organizationId)
-        .eq("opted_in", true)
-        .in("id", contact_ids);
+      const { data: contacts, error: contactsError } =
+        await supabase
+          .from("contacts")
+          .select("id")
+          .eq("organization_id", req.organizationId)
+          .eq("opted_in", true)
+          .in("id", contact_ids);
 
       throwIfError(contactsError);
+
       eligibleContacts = contacts || [];
+
+      if (eligibleContacts.length !== contact_ids.length) {
+        return res.status(400).json({
+          error: "Some contacts are invalid or have not opted in.",
+        });
+      }
     }
 
+    // IMPORTANT: Save both IDs in the campaigns table
     const row = {
       organization_id: req.organizationId,
       name: name.trim(),
       template_name: template_name.trim(),
       language,
-      group_name,
+      group_name: group_name || department.name,
+
+      branch_id: branch_id || null,
+      department_id: department.id,
+
       scheduled_at,
       status: scheduled_at ? "scheduled" : "draft",
       recipient_count: eligibleContacts.length,
       created_by: req.user.id,
     };
 
-    const { data: campaign, error: campaignError } = await supabase
-      .from("campaigns")
-      .insert(row)
-      .select()
-      .single();
+    const { data: campaign, error: campaignError } =
+      await supabase
+        .from("campaigns")
+        .insert(row)
+        .select()
+        .single();
 
     throwIfError(campaignError);
 
+    // Create queued messages
     if (eligibleContacts.length > 0) {
       const messageRows = eligibleContacts.map((contact) => ({
         organization_id: req.organizationId,
@@ -3166,7 +3342,12 @@ router.post("/", async (req, res, next) => {
       throwIfError(messagesError);
     }
 
-    res.status(201).json({ data: campaign });
+    return res.status(201).json({
+      success: true,
+      message: "Campaign created successfully.",
+      data: campaign,
+    });
+
   } catch (error) {
     next(error);
   }

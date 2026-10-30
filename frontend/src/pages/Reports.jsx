@@ -500,12 +500,13 @@
 
 
 
-
 import { useMemo, useState } from "react";
 import {
+  Download,
   FileSpreadsheet,
   FileText,
   Send,
+  CheckCircle2,
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
@@ -525,6 +526,7 @@ function PageHeader({ title, subtitle, children }) {
         <h2 className="text-2xl font-semibold text-brand-900">
           {title}
         </h2>
+
         {subtitle && (
           <p className="text-sm text-slate-600">{subtitle}</p>
         )}
@@ -542,11 +544,11 @@ function PageHeader({ title, subtitle, children }) {
 function DataTable({ columns, rows }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[900px] text-left text-sm">
+      <table className="w-full min-w-[640px] text-left text-sm">
         <thead>
           <tr className="bg-brand-50 text-xs font-semibold text-brand-900">
             {columns.map((c) => (
-              <th key={c.key} className="whitespace-nowrap px-4 py-3.5">
+              <th key={c.key} className="px-4 py-3.5">
                 {c.label}
               </th>
             ))}
@@ -566,15 +568,20 @@ function DataTable({ columns, rows }) {
           ) : (
             rows.map((r, i) => (
               <tr
-                key={r.id ?? `${r.date}-${r.department_id ?? i}`}
+                key={
+                  r.id ??
+                  `${r.date}-${r.branch_id || "no-branch"}-${
+                    r.department_id || "unassigned"
+                  }-${i}`
+                }
                 className="hover:bg-brand-50/60"
               >
                 {columns.map((c) => (
                   <td
                     key={c.key}
-                    className="whitespace-nowrap px-4 py-3.5 text-slate-700"
+                    className="px-4 py-3.5 text-slate-700"
                   >
-                    {c.render ? c.render(r) : r[c.key] ?? "—"}
+                    {c.render ? c.render(r) : r[c.key]}
                   </td>
                 ))}
               </tr>
@@ -595,7 +602,7 @@ function localDay(d) {
 function parseReportDate(value) {
   if (!value) return null;
 
-  // Supports DD/MM/YYYY returned by the backend.
+  // Supports DD/MM/YYYY returned by backend.
   const parts = String(value).split("/");
 
   if (parts.length === 3) {
@@ -604,44 +611,85 @@ function parseReportDate(value) {
     if (!d || !m || !y) return null;
 
     const date = new Date(y, m - 1, d);
+
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  // Supports ISO dates such as YYYY-MM-DD.
+  // Also supports ISO dates.
   const date = new Date(value);
+
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export default function Reports() {
-  const { organization } = useAuth();
-  const { data, loading } = useFetch(api.getReports);
+ 
+const {
+  organization,
+} = useAuth();
 
+const {
+  data,
+  loading,
+  error,
+  refetch,
+} = useFetch(api.getReports);
+
+// Daily report records
+const source = Array.isArray(data?.rows)
+  ? data.rows
+  : Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data)
+      ? data
+      : [];
+
+  // Existing date filters.
   const [period, setPeriod] = useState("monthly");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  // Use backend data only.
-  const source = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.rows)
-      ? data.rows
-      : Array.isArray(data?.data)
-        ? data.data
-        : [];
+  // New branch and department filters.
+  const [branchId, setBranchId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
 
-  // Department totals returned by the reports API.
-  const departmentSource = Array.isArray(data?.departmentRows)
-    ? data.departmentRows
+  // Backend report data.
+  const detailSource = Array.isArray(data?.detailRows)
+    ? data.detailRows
     : [];
 
-  const rows = useMemo(() => {
+  // Database-backed dropdown options.
+  const branches = Array.isArray(data?.branches)
+    ? data.branches
+    : [];
+
+  const departments = Array.isArray(data?.departments)
+    ? data.departments
+    : [];
+const departmentSummary = Array.isArray(data?.departmentRows)
+  ? data.departmentRows
+  : [];
+  // Show all departments when no branch is selected.
+  // Show only selected branch departments otherwise.
+  const filteredDepartments = useMemo(() => {
+    if (!branchId) return departments;
+
+   return departments.filter(
+  (department) =>
+    String(department.branch_id || "") === String(branchId)
+);
+  }, [departments, branchId]);
+
+  // Apply date, branch and department filters.
+  const filteredDetailRows = useMemo(() => {
+    let result = [...detailSource];
+
     const now = new Date();
     const today = localDay(now);
+
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
-    let result = [...source];
-
+    // Existing period filter.
     if (period !== "custom") {
       const days =
         period === "today"
@@ -657,10 +705,12 @@ export default function Reports() {
 
       result = result.filter((r) => {
         const date = parseReportDate(r.date);
+
         return date && date >= startDate && date <= endOfToday;
       });
     }
 
+    // From date filter.
     if (from) {
       const start = localDay(new Date(`${from}T00:00:00`));
 
@@ -670,6 +720,7 @@ export default function Reports() {
       });
     }
 
+    // To date filter.
     if (to) {
       const end = localDay(new Date(`${to}T00:00:00`));
       end.setHours(23, 59, 59, 999);
@@ -680,36 +731,61 @@ export default function Reports() {
       });
     }
 
-    return result;
-  }, [source, period, from, to]);
+    // Branch filter.
+    if (branchId) {
+  result = result.filter(
+    (r) => String(r.branch_id || "") === String(branchId)
+  );
+}
 
-  // Use branch/department details when the backend supplies them.
-  // The daily report remains the source for the chart and date filtering.
-  const reportRows = useMemo(() => {
-    if (departmentSource.length > 0) {
-      return departmentSource.map((r, index) => ({
-        id: r.id ?? `${r.branch_id ?? "no-branch"}-${r.department_id ?? "unassigned"}-${index}`,
-        date: r.date || "",
-        branch: r.branch || r.branch_name || "—",
-        department: r.department || r.department_name || "Unassigned",
-        sent: Number(r.sent || 0),
-        queued: Number(r.queued || 0),
-        failed: Number(r.failed || 0),
-      }));
+    // Department filter.
+    if (departmentId) {
+  result = result.filter(
+    (r) => String(r.department_id || "") === String(departmentId)
+  );
+}
+
+    return result;
+  }, [
+    detailSource,
+    period,
+    from,
+    to,
+    branchId,
+    departmentId,
+  ]);
+
+  // Aggregate filtered department records by date.
+  // Used by existing summary cards and chart.
+  const rows = useMemo(() => {
+    const grouped = new Map();
+
+    for (const record of filteredDetailRows) {
+      if (!grouped.has(record.date)) {
+        grouped.set(record.date, {
+          date: record.date,
+          sent: 0,
+          queued: 0,
+          failed: 0,
+        });
+      }
+
+      const row = grouped.get(record.date);
+
+      row.sent += Number(record.sent || 0);
+      row.queued += Number(record.queued || 0);
+      row.failed += Number(record.failed || 0);
     }
 
-    return rows.map((r, index) => ({
-      ...r,
-      id: r.id ?? `${r.date}-${index}`,
-      branch: r.branch || r.branch_name || "—",
-      department:
-        r.department || r.department_name || "Unassigned",
-      sent: Number(r.sent || 0),
-      queued: Number(r.queued || 0),
-      failed: Number(r.failed || 0),
-    }));
-  }, [departmentSource, rows]);
+    return [...grouped.values()].sort((a, b) => {
+      const dateA = parseReportDate(a.date);
+      const dateB = parseReportDate(b.date);
 
+      return dateA - dateB;
+    });
+  }, [filteredDetailRows]);
+
+  // Existing summary calculations.
   const summary = useMemo(
     () =>
       rows.reduce(
@@ -734,6 +810,7 @@ export default function Reports() {
     const sent = Number(r.sent || 0);
     const queued = Number(r.queued || 0);
     const failed = Number(r.failed || 0);
+
     const total = sent + queued + failed;
 
     return total
@@ -741,22 +818,20 @@ export default function Reports() {
       : "0.0%";
   };
 
-  // Existing table with only two added columns: Branch and Department.
+  // Report table columns.
   const columns = [
     {
       key: "date",
       label: "Date",
-      render: (r) => r.date || "—",
-    },
-    {
-      key: "branch",
-      label: "Branch",
-      render: (r) => r.branch || "—",
     },
     {
       key: "department",
       label: "Department",
-      render: (r) => r.department || "Unassigned",
+      render: (r) => (
+        <span className="font-semibold text-brand-900">
+          {r.department || "Unassigned"}
+        </span>
+      ),
     },
     {
       key: "sent",
@@ -780,21 +855,27 @@ export default function Reports() {
     },
   ];
 
-  const exportRows = reportRows.map((r) => ({
-    Date: r.date || "—",
-    Branch: r.branch || "—",
-    Department: r.department || "Unassigned",
-    Sent: Number(r.sent || 0),
-    Queued: Number(r.queued || 0),
-    Failed: Number(r.failed || 0),
-    "Send Rate": getSendRate(r),
-  }));
+  // Existing Excel export.
+  // Excel export with department and branch details.
+const exportRows = filteredDetailRows.map((r) => ({
+  Date: r.date,
+  Branch: r.branch || "No branch",
+  Department: r.department || "Unassigned",
+  Sent: Number(r.sent || 0),
+  Queued: Number(r.queued || 0),
+  Failed: Number(r.failed || 0),
+  "Send Rate": getSendRate(r),
+}));
 
   const exportExcel = () => {
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(wb, ws, "Messaging Report");
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws,
+      "Messaging Report"
+    );
 
     XLSX.writeFile(
       wb,
@@ -805,10 +886,12 @@ export default function Reports() {
     );
   };
 
+  // Existing PDF export.
   const exportPdf = () => {
-    const doc = new jsPDF({ orientation: "landscape" });
+    const doc = new jsPDF();
 
     doc.setFontSize(16);
+
     doc.text(
       `${organization?.name || "Organization"} - ${
         period[0].toUpperCase() + period.slice(1)
@@ -818,6 +901,7 @@ export default function Reports() {
     );
 
     doc.setFontSize(9);
+
     doc.text(
       `Generated: ${new Date().toLocaleString("en-IN")}`,
       14,
@@ -826,26 +910,40 @@ export default function Reports() {
 
     autoTable(doc, {
       startY: 31,
-      head: [[
-        "Date",
-        "Branch",
-        "Department",
-        "Sent",
-        "Queued",
-        "Failed",
-        "Send Rate",
-      ]],
-      body: exportRows.map((r) => [
-        r.Date,
-        r.Branch,
-        r.Department,
-        r.Sent,
-        r.Queued,
-        r.Failed,
-        r["Send Rate"],
-      ]),
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [45, 55, 72] },
+     head: [[
+  "Date",
+  "Branch",
+  "Department",
+  "Sent",
+  "Queued",
+  "Failed",
+  "Send Rate",
+]],
+
+body: exportRows.map((r) => [
+  r.Date,
+  r.Branch,
+  r.Department,
+  r.Sent,
+  r.Queued,
+  r.Failed,
+  r["Send Rate"],
+]),
+
+styles: {
+  fontSize: 8,
+  cellPadding: 2.5,
+},
+
+headStyles: {
+  fontSize: 8,
+},
+
+columnStyles: {
+  0: { cellWidth: 22 },
+  1: { cellWidth: 30 },
+  2: { cellWidth: 35 },
+},
     });
 
     doc.save(
@@ -856,7 +954,11 @@ export default function Reports() {
     );
   };
 
-  const max = Math.max(1, ...rows.map((r) => Number(r.sent || 0)));
+  // Existing chart maximum.
+  const max = Math.max(
+    1,
+    ...rows.map((r) => Number(r.sent || 0))
+  );
 
   if (loading) {
     return (
@@ -883,8 +985,11 @@ export default function Reports() {
         </button>
       </PageHeader>
 
+      {/* Filters */}
       <section className="card mb-6 p-5">
         <div className="mb-5 flex flex-wrap items-end gap-4 rounded-2xl border border-sky-100 bg-gradient-to-r from-white via-sky-50/70 to-emerald-50/60 p-4 shadow-[0_6px_24px_rgba(56,189,248,0.10)]">
+
+          {/* Period Filter */}
           <div className="min-w-[180px] flex-1">
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Report period
@@ -902,6 +1007,7 @@ export default function Reports() {
             </select>
           </div>
 
+          {/* From Date */}
           <div className="min-w-[160px] flex-1">
             <label className="mb-2 block text-sm font-medium text-slate-700">
               From
@@ -915,6 +1021,7 @@ export default function Reports() {
             />
           </div>
 
+          {/* To Date */}
           <div className="min-w-[160px] flex-1">
             <label className="mb-2 block text-sm font-medium text-slate-700">
               To
@@ -928,6 +1035,55 @@ export default function Reports() {
             />
           </div>
 
+          {/* Branch Filter */}
+          <div className="min-w-[170px] flex-1">
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Filter by Branch
+            </label>
+
+            <select
+              value={branchId}
+              onChange={(e) => {
+                setBranchId(e.target.value);
+                setDepartmentId("");
+              }}
+              className="input w-full rounded-xl border border-violet-200 bg-white/90 shadow-sm transition focus:border-violet-400 focus:ring-2 focus:ring-violet-200"
+            >
+              <option value="">All Branches</option>
+
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Department Filter */}
+          <div className="min-w-[170px] flex-1">
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Filter by Department
+            </label>
+
+            <select
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="input w-full rounded-xl border border-sky-200 bg-white/90 shadow-sm transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+            >
+              <option value="">All Departments</option>
+
+              {filteredDepartments.map((department) => (
+                <option
+                  key={department.id}
+                  value={department.id}
+                >
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Reset Filters */}
           <button
             type="button"
             className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-gradient-to-r from-white to-emerald-50 px-5 py-2.5 text-sm font-medium text-emerald-700 shadow-sm transition hover:border-emerald-400 hover:shadow-md"
@@ -935,6 +1091,8 @@ export default function Reports() {
               setFrom("");
               setTo("");
               setPeriod("monthly");
+              setBranchId("");
+              setDepartmentId("");
             }}
           >
             <RefreshCw size={16} />
@@ -942,6 +1100,7 @@ export default function Reports() {
           </button>
         </div>
 
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             {
@@ -1005,6 +1164,7 @@ export default function Reports() {
         </div>
       </section>
 
+      {/* Messages Sent By Day */}
       <section className="card mb-6 p-5">
         <h3 className="mb-4 text-lg font-semibold text-brand-900">
           Messages sent by day
@@ -1041,6 +1201,7 @@ export default function Reports() {
         )}
       </section>
 
+      {/* Department-wise Report Details */}
       <section className="card">
         <div className="border-b border-slate-100 px-4 py-4">
           <h3 className="font-semibold text-brand-900">
@@ -1048,11 +1209,14 @@ export default function Reports() {
           </h3>
 
           <p className="text-xs text-slate-500">
-            {reportRows.length} report records · filtered to the selected period
+            {filteredDetailRows.length} department-wise records · filtered to the selected period
           </p>
         </div>
 
-        <DataTable columns={columns} rows={reportRows} />
+        <DataTable
+          columns={columns}
+          rows={filteredDetailRows}
+        />
       </section>
     </>
   );

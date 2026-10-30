@@ -341,10 +341,34 @@ cancelScheduledMessage: (id) =>
   }),
   /* ---------- REPORTS ---------- */
 
-  getReports: async () =>
-    backendEnabled
-      ? (await request("/reports")).data
-      : demoGet("reports", (data) => data.reportSummary),
+  
+getReports: async () => {
+  const response = await request("/reports");
+
+  return {
+    rows: Array.isArray(response.rows)
+      ? response.rows
+      : Array.isArray(response.data)
+        ? response.data
+        : [],
+
+    detailRows: Array.isArray(response.detailRows)
+      ? response.detailRows
+      : [],
+
+    departmentRows: Array.isArray(response.departmentRows)
+      ? response.departmentRows
+      : [],
+
+    branches: Array.isArray(response.branches)
+      ? response.branches
+      : [],
+
+    departments: Array.isArray(response.departments)
+      ? response.departments
+      : [],
+  };
+},
 
   /* ---------- GENERIC HELPERS ---------- */
 
