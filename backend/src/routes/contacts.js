@@ -623,46 +623,50 @@ async function findDepartment(organizationId, departmentId) {
 
 router.get('/', async (req, res, next) => {
   try {
-    const {
-      q = '',
-      group = '',
-      page = '1',
-      limit = '100',
-    } = req.query;
+    const { q = '', group = '' } = req.query;
 
-    let query = supabase
-      .from('contacts')
-      .select('*', { count: 'exact' })
-      .eq('organization_id', req.organizationId)
-      .order('created_at', { ascending: false });
+    const pageSize = 50000;
+    let allContacts = [];
+    let from = 0;
+    let count = 0;
 
-    if (group) {
-      query = query.eq('group_name', group);
+    while (true) {
+      let query = supabase
+        .from('contacts')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', req.organizationId)
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (group) {
+        query = query.eq('group_name', group);
+      }
+
+      if (q) {
+        const safeQuery = String(q).replace(/[(),]/g, '');
+
+        query = query.or(
+          `name.ilike.%${safeQuery}%,phone.ilike.%${safeQuery}%`
+        );
+      }
+
+      const { data, error, count: total } = await query;
+
+      if (error) throw error;
+
+      count = total || 0;
+      allContacts.push(...(data || []));
+
+      if (!data || data.length < pageSize || allContacts.length >= count) {
+        break;
+      }
+
+      from += pageSize;
     }
-
-    if (q) {
-      const safeQuery = String(q).replace(/[(),]/g, '');
-
-      query = query.or(
-        `name.ilike.%${safeQuery}%,phone.ilike.%${safeQuery}%`
-      );
-    }
-
-    const currentPage = Math.max(1, Number(page) || 1);
-    const pageLimit = Math.min(250, Math.max(1, Number(limit) || 100));
-
-    const { data, error, count } = await query.range(
-      (currentPage - 1) * pageLimit,
-      currentPage * pageLimit - 1
-    );
-
-    throwIfError(error);
 
     res.json({
-      data: data || [],
-      total: count || 0,
-      page: currentPage,
-      limit: pageLimit,
+      data: allContacts,
+      total: count,
     });
   } catch (error) {
     next(error);
