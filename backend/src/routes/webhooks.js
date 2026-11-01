@@ -494,7 +494,7 @@ router.get("/whatsapp", (req, res) => {
 router.post("/whatsapp", async (req, res) => {
   try {
     const payload = req.body;
-
+console.log("[WA RAW]", JSON.stringify(payload).slice(0, 1500));
     if (payload?.object !== "whatsapp_business_account") {
       return res.sendStatus(404);
     }
