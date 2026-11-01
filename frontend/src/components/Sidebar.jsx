@@ -17,6 +17,7 @@ import {
   ChevronRight,
   GitBranch,
   Folder,
+    MessageSquare,
 } from "lucide-react";
 
 import { useAuth } from "../hooks/useAuth";
@@ -27,8 +28,9 @@ const LOGO_SRC = "/logo.png";
 const links = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/contacts", label: "Contacts", icon: Users },
-  { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/templates", label: "Tempulates", icon: FileText },
   { to: "/campaigns", label: "Campaigns", icon: Send },
+   { to: "/inbox", label: "Inbox", icon: MessageSquare },
   { to: "/scheduled", label: "Scheduled Messages", icon: CalendarClock },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -57,7 +59,8 @@ export default function Sidebar({ open, onClose }) {
   const [expandedBranches, setExpandedBranches] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-
+    // Number of customer replies nobody has opened yet.
+  const [unreadReplies, setUnreadReplies] = useState(0);
   const handleLogout = () => {
     logout();
     navigate("/login", { replace: true });
@@ -89,6 +92,33 @@ export default function Sidebar({ open, onClose }) {
       setLoading(false);
     }
   };
+
+    // Keep the Inbox badge fresh.
+  useEffect(() => {
+    let active = true;
+
+    const refreshUnread = async () => {
+      try {
+        const count = await api.getInboxUnreadCount();
+        if (active) setUnreadReplies(count);
+      } catch {
+        // The badge is optional; ignore temporary errors.
+      }
+    };
+
+    refreshUnread();
+
+    const timer = setInterval(refreshUnread, 30000);
+    window.addEventListener("inbox-unread-changed", refreshUnread);
+    window.addEventListener("organization-changed", refreshUnread);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+      window.removeEventListener("inbox-unread-changed", refreshUnread);
+      window.removeEventListener("organization-changed", refreshUnread);
+    };
+  }, [organization?.id]);
 
   useEffect(() => {
     loadMasterData();
@@ -396,8 +426,13 @@ const openDepartment = (department, branchId = null) => {
                 }`
               }
             >
-              <Icon size={18} />
-              {label}
+                           <Icon size={18} />
+              <span className="flex-1">{label}</span>
+              {to === "/inbox" && unreadReplies > 0 && (
+                <span className="min-w-[20px] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+                  {unreadReplies > 99 ? "99+" : unreadReplies}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

@@ -15,7 +15,7 @@ import ScheduledMessages from "./pages/ScheduledMessages";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import MasterManagement from "./pages/MasterManagement";
-
+import Inbox from "./pages/Inbox";
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
 
@@ -77,6 +77,7 @@ export default function App() {
         <Route path="/scheduled" element={<ScheduledMessages />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/inbox" element={<Inbox />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />

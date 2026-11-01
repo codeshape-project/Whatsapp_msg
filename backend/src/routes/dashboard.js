@@ -14,7 +14,8 @@ async function countRows(table, organizationId, status) {
     .from(table)
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId);
-
+ 
+     if (table === 'messages') query = query.eq('direction', 'outgoing');
   if (status) query = query.eq('status', status);
 
   const { count, error } = await query;
@@ -73,12 +74,14 @@ router.get('/trend', async (req, res, next) => {
     start.setUTCHours(0, 0, 0, 0);
     start.setUTCDate(start.getUTCDate() - 6);
 
-    const { data, error } = await supabase
+        const { data, error } = await supabase
       .from('messages')
       .select('created_at, status')
       .eq('organization_id', orgId)
+      .eq('direction', 'outgoing')
       .gte('created_at', start.toISOString())
       .order('created_at', { ascending: true });
+      
 
     if (error) throw error;
 

@@ -366,6 +366,38 @@ cancelScheduledMessage: (id) =>
     method: "PATCH",
     body: JSON.stringify({}),
   }),
+
+    /* ---------- WHATSAPP INBOX ---------- */
+
+  getInboxConversations: async (filter = "all") => {
+    const response = await request(
+      `/inbox/conversations?filter=${encodeURIComponent(filter)}`
+    );
+
+    return unwrapArray(response, ["conversations"]);
+  },
+
+  getInboxMessages: async (contactId) => {
+    const response = await request(
+      `/inbox/conversations/${encodeURIComponent(contactId)}/messages`
+    );
+
+    return {
+      messages: unwrapArray(response, ["messages"]),
+      contact: response.contact || null,
+    };
+  },
+
+  markInboxRead: (contactId) =>
+    request(`/inbox/conversations/${encodeURIComponent(contactId)}/read`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
+
+  getInboxUnreadCount: async () =>
+    Number((await request("/inbox/unread-count")).data?.unread) || 0,
+
+  
   /* ---------- REPORTS ---------- */
 
   
