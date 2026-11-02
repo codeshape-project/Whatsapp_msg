@@ -739,24 +739,61 @@ router.post('/', async (req, res, next) => {
     };
 
     let result;
+if (id) {
+  const { data: existingContact, error: findError } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("organization_id", req.organizationId)
+    .eq("id", id)
+    .maybeSingle();
 
-    if (id) {
-      result = await supabase
-        .from('contacts')
-        .update(row)
-        .eq('organization_id', req.organizationId)
-        .eq('id', id)
-        .select()
-        .single();
-    } else {
-      result = await supabase
-        .from('contacts')
-        .upsert(row, {
-          onConflict: 'organization_id,phone',
-        })
-        .select()
-        .single();
-    }
+  if (findError) throw findError;
+
+  if (!existingContact) {
+    return res.status(404).json({
+      success: false,
+      error: "Contact not found. Please refresh and try again.",
+    });
+  }
+
+  const { data: duplicateContact, error: duplicateError } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("organization_id", req.organizationId)
+    .eq("phone", normalized)
+    .neq("id", id)
+    .maybeSingle();
+
+  if (duplicateError) throw duplicateError;
+
+  if (duplicateContact) {
+    return res.status(409).json({
+      success: false,
+      error: "This phone number is already used by another contact.",
+    });
+  }
+
+  result = await supabase
+    .from("contacts")
+    .update(row)
+    .eq("organization_id", req.organizationId)
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+
+  if (!result.data && !result.error) {
+    return res.status(404).json({
+      success: false,
+      error: "Contact was not updated. Please refresh and try again.",
+    });
+  }
+} else {
+  result = await supabase
+    .from("contacts")
+    .upsert(row, { onConflict: "organization_id,phone" })
+    .select()
+    .single();
+}
 
     throwIfError(result.error);
 
