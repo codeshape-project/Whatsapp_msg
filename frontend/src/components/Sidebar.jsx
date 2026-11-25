@@ -30,7 +30,7 @@ const links = [
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/templates", label: "Tempulates", icon: FileText },
   { to: "/campaigns", label: "Campaigns", icon: Send },
-   { to: "/inbox", label: "Inbox", icon: MessageSquare },
+  //  { to: "/inbox", label: "Inbox", icon: MessageSquare },
   { to: "/scheduled", label: "Scheduled Messages", icon: CalendarClock },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
