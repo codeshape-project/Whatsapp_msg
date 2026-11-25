@@ -20,7 +20,8 @@ const SCHOOL_ORGANIZATION = ORGANIZATIONS.find(
   (org) => org.id === "codeshape-school"
 );
 
-const ADMIN_EMAIL = "admin@codeshape-school.com";
+// const ADMIN_EMAIL = "admin@codeshape-school.com";
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "";
 
 export default function Login() {
   const { login, isAuthenticated } = useAuth();
