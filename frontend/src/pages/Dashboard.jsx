@@ -890,20 +890,20 @@ export default function Dashboard() {
             : ""
         }`}
       >
-        <button
+        {/* <button
           type="button"
           onClick={retryAll}
           className="btn-ghost inline-flex items-center gap-2"
         >
           <RefreshCw size={16} />
           Refresh
-        </button>
+        </button> */}
 
-        <span className="btn-ghost inline-flex items-center gap-2">
+        {/* <span className="btn-ghost inline-flex items-center gap-2">
           <Calendar size={16} />
           Last 7 Days
           <ChevronDown size={16} />
-        </span>
+        </span> */}
       </PageHeader>
 
       {/* Five summary cards in one row on large screens */}
